@@ -1,0 +1,60 @@
+{
+  "name": "wrkout",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:local": "pglite-server --db=.pglite --port=54322 --max-connections=4",
+    "setup:secrets": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/setup-secrets.ts",
+    "hash-password": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/hash-password.ts",
+    "seed:demo": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-demo.ts",
+    "spike:garmin": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/garmin-spike.ts",
+    "spike:claude-strava": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/claude-strava-spike.ts",
+    "try:plan": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/try-plan.ts",
+    "icons": "tsx scripts/generate-icons.tsx"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@garmin/fitsdk": "^21.221.0",
+    "drizzle-orm": "^0.45.4",
+    "fflate": "^0.8.3",
+    "jose": "^6.2.17",
+    "lucide-react": "^1.72.0",
+    "next": "16.4.6",
+    "postgres": "^4.1.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1",
+    "web-push": "^4.0.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@electric-sql/pglite-socket": "^0.2.19",
+    "@tailwindcss/turbopack": "4.3.3",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
+    "dotenv": "^18.0.10",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.6",
+    "tailwindcss": "4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
+  },
+  "allowScripts": {
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
+  }
+}

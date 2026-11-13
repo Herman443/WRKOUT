@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/*
+  WRKOUT tokens. Colour is reserved for training intensity (z1–z5); everything else
+  is spruce ink on fog. Numbers use Archivo's condensed width, like a race bib.
+*/
+:root {
+  --fog: #eef1ee;
+  --paper: #f8faf8;
+  --ink: #14231d;
+  --muted: #5e6e67;
+  --line: #d5ddd8;
+  --z1: #a9bcc6;
+  --z2: #6a9c86;
+  --z3: #e3b23c;
+  --z4: #e06c38;
+  --z5: #be2f4b;
+  --good: #3f7f63;
+  --warn: #b7791f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fog: #0e1613;
+    --paper: #16211c;
+    --ink: #e7eeea;
+    --muted: #92a39b;
+    --line: #26352e;
+    --z1: #7f97a3;
+    --z2: #5f927c;
+    --good: #6fb592;
+    --warn: #e0a84a;
+  }
+}
+
+@theme inline {
+  --color-fog: var(--fog);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-z1: var(--z1);
+  --color-z2: var(--z2);
+  --color-z3: var(--z3);
+  --color-z4: var(--z4);
+  --color-z5: var(--z5);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  background: var(--fog);
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-variation-settings: "wdth" 100;
+}
+
+/* Race-bib numerals: condensed, heavy, tabular. */
+.num {
+  font-variation-settings: "wdth" 72;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.condensed {
+  font-variation-settings: "wdth" 80;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
