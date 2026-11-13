@@ -6,6 +6,8 @@ A private, phone-first training app. You pick a race, describe your week and how
 - **Paces and zones** — Daniels VDOT paces from your race times (or zone 2 pace), Friel heart-rate zones, Coggan power zones.
 - **Automatic analysis** — new Garmin activities are pulled every 15 minutes, matched to the plan, scored for compliance and analysed by Claude. Small adjustments to the next days are applied automatically; bigger ones wait for your OK.
 - **Weekly review** every Sunday evening, which can also propose updated paces/zones.
+- **Treadmill runs** — switch a run session to *Treadmill* and its targets show as belt speed (km/h). A treadmill run's watch distance is treated as a guess (load from heart rate, pace not scored) until you enter what the treadmill showed, in total or lap by lap with incline; incline counts towards load.
+- **Live treadmill sessions** — start a planned run (or an unplanned one) on the treadmill in the app. The live screen counts down each step and sets the speed it plans; you nudge speed and incline when you run faster or slower. When the watch's run syncs, its distance, laps (one per step, with the watch's heart rate) and incline come from the session; a session not recorded on the watch becomes an activity of its own.
 - **Coach chat** — tell it about soreness, travel or a bad night and it adapts the plan.
 - **Strava through Claude** — the coach can look up your Strava history through Strava's official MCP server.
 

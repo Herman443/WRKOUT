@@ -95,3 +95,15 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
     </label>
   );
 }
+
+/** Opens the live treadmill screen, for a planned run or (without `workoutId`) an unplanned one. */
+export function StartTreadmill({ workoutId, quiet = false, children }: { workoutId?: string; quiet?: boolean; children: ReactNode }) {
+  return (
+    <Link
+      href={workoutId ? `/treadmill?workout=${workoutId}` : "/treadmill"}
+      className={`inline-block rounded-xl px-4 py-2.5 text-sm font-medium ${quiet ? "border border-line bg-paper text-ink" : "bg-ink text-fog"}`}
+    >
+      {children}
+    </Link>
+  );
+}

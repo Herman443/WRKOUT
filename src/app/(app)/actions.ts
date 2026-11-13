@@ -4,6 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { z } from "zod";
 import { db } from "@/db";
 import {
   activities,
@@ -21,11 +22,21 @@ import type { MarkerUpdate } from "@/lib/ai/review";
 import { requireSession } from "@/lib/auth";
 import { addDays, startOfWeek, todayLocal, weekday } from "@/lib/dates";
 import { PR_DISTANCES } from "@/lib/forms";
-import { getKv, pollGarmin } from "@/lib/ingest";
+import { getKv, pollGarmin, rescoreActivity, saveTreadmillSession, setKv } from "@/lib/ingest";
 import { enqueue, kickWorker } from "@/lib/jobs";
 import { decideChange, getActivePlan } from "@/lib/plan-store";
 import { sendPush } from "@/lib/push";
 import { disconnectStravaMcp } from "@/lib/strava/mcp-auth";
+import type { Lap } from "@/lib/training/compliance";
+import {
+  climbM,
+  isTreadmill,
+  lapsFromBelt,
+  scaleLaps,
+  treadmillCorrection,
+  type RunSurface,
+  type TreadmillCorrection,
+} from "@/lib/training/treadmill";
 
 // ---------- parsing ----------
 
@@ -235,6 +246,128 @@ export async function saveFeedback(form: FormData) {
     after(kickWorker);
   }
   revalidatePath(`/activities/${id}`);
+}
+
+// ---------- treadmill ----------
+
+export async function setRunSurface(form: FormData) {
+  await requireSession();
+  const surface: RunSurface = form.get("surface") === "treadmill" ? "treadmill" : "outdoor";
+  await setKv("run_surface", surface);
+  revalidatePath("/", "layout");
+}
+
+/** Replaces a treadmill run's watch-guessed distance with what the belt said. */
+export async function correctTreadmill(form: FormData) {
+  await requireSession();
+  const id = String(form.get("id"));
+  const [a] = await db.select().from(activities).where(eq(activities.id, id));
+  if (!a || !isTreadmill(a.subSport)) return;
+
+  // Without laps from the FIT file, treat the whole run as one lap.
+  const base = a.laps.length ? a.laps : [{ durationSec: a.movingSec ?? a.durationSec, distanceM: a.distanceM ?? 0 }];
+  const incline = (v: FormDataEntryValue | null) => {
+    const n = float(v);
+    return n == null ? null : Math.min(40, Math.max(-3, n));
+  };
+  const method = form.get("method") === "laps" ? "laps" : "distance";
+  let laps: Lap[];
+  if (method === "distance") {
+    const km = float(form.get("distanceKm"));
+    if (!km || km <= 0 || km > 100) return;
+    laps = scaleLaps(base, km * 1000, incline(form.get("incline")));
+  } else {
+    laps = lapsFromBelt(
+      base,
+      base.map((_, i) => {
+        const kmh = float(form.get(`kmh_${i}`));
+        return { kmh: kmh && kmh >= 1 && kmh <= 30 ? kmh : null, inclinePct: incline(form.get(`incline_${i}`)) };
+      }),
+    );
+  }
+
+  const previous = treadmillCorrection(a.extra);
+  const correction: TreadmillCorrection = {
+    method,
+    originalDistanceM: previous ? previous.originalDistanceM : a.distanceM,
+    originalElevationGainM: previous ? previous.originalElevationGainM : a.elevationGainM,
+    originalLaps: previous ? previous.originalLaps : a.laps,
+    correctedAt: new Date().toISOString(),
+  };
+  const hasIncline = laps.some((l) => l.inclinePct != null);
+  await db
+    .update(activities)
+    .set({
+      laps,
+      distanceM: laps.reduce((sum, l) => sum + l.distanceM, 0),
+      elevationGainM: hasIncline ? Math.round(climbM(laps)) : correction.originalElevationGainM,
+      extra: { ...a.extra, treadmill: correction },
+    })
+    .where(eq(activities.id, id));
+  await afterActivityEdit(id, form.get("reanalyze") === "1");
+}
+
+/** Puts back the watch's own numbers. */
+export async function resetTreadmill(form: FormData) {
+  await requireSession();
+  const id = String(form.get("id"));
+  const [a] = await db.select().from(activities).where(eq(activities.id, id));
+  const correction = a && treadmillCorrection(a.extra);
+  if (!correction) return;
+  const extra = { ...a.extra };
+  delete extra.treadmill;
+  await db
+    .update(activities)
+    .set({
+      laps: correction.originalLaps,
+      distanceM: correction.originalDistanceM,
+      elevationGainM: correction.originalElevationGainM,
+      extra,
+    })
+    .where(eq(activities.id, id));
+  await afterActivityEdit(id, false);
+}
+
+async function afterActivityEdit(id: string, reanalyze: boolean) {
+  await rescoreActivity(id);
+  if (reanalyze) {
+    await db.update(activities).set({ analysisStatus: "pending" }).where(eq(activities.id, id));
+    await enqueue("analyze_activity", { activityId: id });
+    after(kickWorker);
+  }
+  revalidatePath("/", "layout");
+}
+
+const finishedSessionSchema = z.object({
+  id: z.uuid(),
+  plannedWorkoutId: z.uuid().nullable(),
+  recordedOnWatch: z.boolean(),
+  segments: z
+    .array(
+      z.object({
+        startMs: z.number(),
+        endMs: z.number(),
+        kmh: z.number().min(0).max(30),
+        inclinePct: z.number().min(-5).max(40),
+        lap: z.number().int().min(0).max(500),
+      }),
+    )
+    .min(1)
+    .max(5000),
+});
+
+/** Saves a live treadmill session. Returns the activity it ended up on, if there is one yet. */
+export async function finishTreadmillSession(input: z.input<typeof finishedSessionSchema>): Promise<{ activityId: string | null }> {
+  await requireSession();
+  const data = finishedSessionSchema.parse(input);
+  const activityId = await saveTreadmillSession(data);
+  after(async () => {
+    // The watch's run may already be on Garmin; fetching it now saves waiting for the next tick.
+    if (!activityId && data.recordedOnWatch) await pollGarmin().catch((e) => console.warn("Garmin poll after treadmill session failed", e));
+    await kickWorker();
+  });
+  revalidatePath("/", "layout");
+  return { activityId };
 }
 
 export async function disconnectStrava() {

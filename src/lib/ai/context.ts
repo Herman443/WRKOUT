@@ -5,7 +5,9 @@ import { activities, coachMessages, dailyHealth, planChanges } from "@/db/schema
 import { deriveMarkers } from "../athlete";
 import { addDays, diffDays, formatDay, startOfWeek, todayLocal, weekday, WEEKDAYS } from "../dates";
 import { getActivePlan, getProfile, getWeeks, workoutsBetween } from "../plan-store";
+import { getKv } from "../ingest";
 import { acwr, fitnessSeries } from "../training/load";
+import { isTreadmill, paceTrusted, type RunSurface } from "../training/treadmill";
 import { formatDuration, formatPace } from "../training/vdot";
 import type { Zone } from "../training/zones";
 
@@ -66,6 +68,10 @@ export async function buildContext(opts: { upcomingDays?: number } = {}): Promis
           (a.maxWeekdayMinutes ? `; weekday sessions up to ${a.maxWeekdayMinutes} min` : "") +
           `; strength ${a.strength ? "wanted" : "not wanted"}`,
       );
+    if ((await getKv<RunSurface>("run_surface")) === "treadmill")
+      out.push(
+        "Runs mostly on a treadmill: the app shows pace targets as belt speed. Prefer steps with steady, time- or distance-based targets that are easy to set on a belt, and write hill work as incline (%).",
+      );
     if (profile.notes) out.push(`Athlete notes: ${profile.notes}`);
   } else {
     out.push("No profile yet.");
@@ -116,8 +122,9 @@ export async function buildContext(opts: { upcomingDays?: number } = {}): Promis
   if (recent.length) {
     out.push("\n## Completed activities (last 28 days)");
     for (const a of recent) {
+      const belt = isTreadmill(a.subSport) ? (paceTrusted(a) ? " (treadmill)" : " (treadmill, distance is the watch's guess)") : "";
       out.push(
-        `- ${a.localDate} ${a.sport} "${a.name}": ${formatDuration(a.durationSec)}${a.distanceM ? `, ${km(a.distanceM)}` : ""}` +
+        `- ${a.localDate} ${a.sport}${belt} "${a.name}": ${formatDuration(a.durationSec)}${a.distanceM ? `, ${km(a.distanceM)}` : ""}` +
           (a.avgHr ? `, avg HR ${a.avgHr}` : "") +
           (a.normalizedPowerW ? `, NP ${a.normalizedPowerW} W` : "") +
           (a.load ? `, load ${Math.round(a.load)}` : "") +

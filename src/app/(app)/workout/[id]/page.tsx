@@ -4,12 +4,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SubmitButton } from "@/components/submit-button";
-import { Panel, Skeleton, inputClass } from "@/components/ui";
+import { Panel, Skeleton, StartTreadmill, inputClass } from "@/components/ui";
 import { WorkoutHero } from "@/components/workout-hero";
 import { db } from "@/db";
 import { activities, plannedWorkouts } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
 import { addDays, formatDay, startOfWeek, todayLocal } from "@/lib/dates";
+import { getKv } from "@/lib/ingest";
+import type { RunSurface } from "@/lib/training/treadmill";
 import { formatDuration } from "@/lib/training/vdot";
 import { moveWorkout, setWorkoutStatus } from "../../actions";
 
@@ -30,6 +32,7 @@ async function Workout({ params }: Pick<PageProps<"/workout/[id]">, "params">) {
   const [w] = await db.select().from(plannedWorkouts).where(eq(plannedWorkouts.id, id));
   if (!w) notFound();
   const [activity] = w.activityId ? await db.select().from(activities).where(eq(activities.id, w.activityId)) : [];
+  const surface = (await getKv<RunSurface>("run_surface")) ?? "outdoor";
   const today = todayLocal();
   const weekEnd = addDays(startOfWeek(w.date), 6);
   const canChange = w.status !== "completed" && w.date >= today;
@@ -47,7 +50,14 @@ async function Workout({ params }: Pick<PageProps<"/workout/[id]">, "params">) {
       {w.status === "skipped" && <p className="mt-1 text-warn">Skipped</p>}
       {w.status === "missed" && <p className="mt-1 text-warn">Not done</p>}
 
-      <WorkoutHero workout={w} />
+      <WorkoutHero workout={w} surface={surface} />
+      {w.sport === "run" && w.status !== "completed" && (
+        <div className="mt-6">
+          <StartTreadmill workoutId={w.id} quiet={surface !== "treadmill"}>
+            Start on the treadmill
+          </StartTreadmill>
+        </div>
+      )}
 
       {activity && (
         <Link href={`/activities/${activity.id}`} className="mt-8 block">

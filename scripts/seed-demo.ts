@@ -57,7 +57,7 @@ const longRun = (min: number): Step[] => [
 ];
 
 async function main() {
-  for (const table of [t.analyses, t.planChanges, t.coachMessages, t.activities, t.plannedWorkouts, t.planWeeks, t.plans, t.goals, t.dailyHealth, t.jobs, t.kv, t.aiCalls]) {
+  for (const table of [t.analyses, t.planChanges, t.coachMessages, t.treadmillSessions, t.activities, t.plannedWorkouts, t.planWeeks, t.plans, t.goals, t.dailyHealth, t.jobs, t.kv, t.aiCalls]) {
     await db.delete(table);
   }
   await db.delete(t.athleteProfile);

@@ -2,6 +2,7 @@ import { boolean, date, index, integer, jsonb, pgSchema, real, text, timestamp, 
 import type { ChangeOp } from "@/lib/training/changes";
 import type { Lap } from "@/lib/training/compliance";
 import type { MacroPlan } from "@/lib/training/plan";
+import type { Segment } from "@/lib/training/treadmill-live";
 import type { RaceResult } from "@/lib/training/vdot";
 import type { Sport, Step } from "@/lib/training/workout-structure";
 
@@ -174,6 +175,23 @@ export const activities = app.table(
   (t) => [index("activities_start_idx").on(t.startTime), index("activities_status_idx").on(t.analysisStatus)],
 );
 
+/** A treadmill run tracked live in the app; merged into the watch's activity when it syncs. */
+export const treadmillSessions = app.table(
+  "treadmill_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    plannedWorkoutId: uuid("planned_workout_id"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
+    segments: jsonb("segments").$type<Segment[]>().notNull(),
+    /** False when the app's session is the only record (no watch activity is coming) */
+    recordedOnWatch: boolean("recorded_on_watch").default(true).notNull(),
+    activityId: uuid("activity_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("treadmill_sessions_started_idx").on(t.startedAt)],
+);
+
 export const analyses = app.table("analyses", {
   id: uuid("id").primaryKey().defaultRandom(),
   kind: text("kind").$type<"activity" | "weekly" | "coach_note">().notNull(),
@@ -289,3 +307,4 @@ export type Activity = typeof activities.$inferSelect;
 export type Analysis = typeof analyses.$inferSelect;
 export type DailyHealth = typeof dailyHealth.$inferSelect;
 export type PlanChange = typeof planChanges.$inferSelect;
+export type TreadmillSession = typeof treadmillSessions.$inferSelect;

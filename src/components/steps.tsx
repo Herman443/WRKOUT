@@ -1,8 +1,9 @@
 import { stepLevel, LEVEL_COLOR } from "@/lib/training/intensity";
+import { formatKmh, kmhFromPace } from "@/lib/training/treadmill";
 import { formatDuration, formatPace } from "@/lib/training/vdot";
 import type { SimpleStep, Step, Target, WorkoutType } from "@/lib/training/workout-structure";
 
-const KIND_LABEL: Record<SimpleStep["kind"], string> = {
+export const KIND_LABEL: Record<SimpleStep["kind"], string> = {
   warmup: "Warm up",
   work: "Work",
   recovery: "Recover",
@@ -10,11 +11,16 @@ const KIND_LABEL: Record<SimpleStep["kind"], string> = {
   cooldown: "Cool down",
 };
 
-export function formatTarget(t: Target): string {
+/** `treadmill` shows pace as belt speed, slowest first. */
+export function formatTarget(t: Target, treadmill = false): string {
   const range = (lo: number | null, hi: number | null, fmt: (n: number) => string) =>
-    lo && hi ? `${fmt(lo)}–${fmt(hi)}` : lo ? fmt(lo) : hi ? fmt(hi) : "";
+    lo && hi && fmt(lo) !== fmt(hi) ? `${fmt(lo)}–${fmt(hi)}` : lo ? fmt(lo) : hi ? fmt(hi) : "";
   switch (t.type) {
     case "pace": {
+      if (treadmill) {
+        const r = range(t.high, t.low, (n) => formatKmh(kmhFromPace(n)));
+        return r ? `${r} km/h` : (t.zone ?? "");
+      }
       const r = range(t.low, t.high, formatPace);
       return r ? `${r} /km` : (t.zone ?? "");
     }
@@ -42,9 +48,9 @@ function formatStepDuration(s: SimpleStep) {
   return "Open";
 }
 
-function Row({ step, type }: { step: SimpleStep; type: WorkoutType }) {
+function Row({ step, type, treadmill }: { step: SimpleStep; type: WorkoutType; treadmill: boolean }) {
   const level = stepLevel(step, type);
-  const target = formatTarget(step.target);
+  const target = formatTarget(step.target, treadmill);
   return (
     <li className="flex items-baseline gap-3 py-2">
       <span className={`${LEVEL_COLOR[level]} mt-1 h-2.5 w-2.5 shrink-0 self-center rounded-full`} aria-hidden />
@@ -59,7 +65,7 @@ function Row({ step, type }: { step: SimpleStep; type: WorkoutType }) {
   );
 }
 
-export function StepList({ structure, type }: { structure: Step[]; type: string }) {
+export function StepList({ structure, type, treadmill = false }: { structure: Step[]; type: string; treadmill?: boolean }) {
   if (structure.length === 0) return null;
   return (
     <ol className="divide-y divide-line">
@@ -69,12 +75,12 @@ export function StepList({ structure, type }: { structure: Step[]; type: string 
             <div className="num text-lg">{s.times} ×</div>
             <ol className="ml-3 border-l-2 border-line pl-3">
               {s.steps.map((inner, j) => (
-                <Row key={j} step={inner} type={type as WorkoutType} />
+                <Row key={j} step={inner} type={type as WorkoutType} treadmill={treadmill} />
               ))}
             </ol>
           </li>
         ) : (
-          <Row key={i} step={s} type={type as WorkoutType} />
+          <Row key={i} step={s} type={type as WorkoutType} treadmill={treadmill} />
         ),
       )}
     </ol>
