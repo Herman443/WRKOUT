@@ -1,11 +1,11 @@
-import { and, gte, lte } from "drizzle-orm";
+import { between, desc } from "drizzle-orm";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { Silhouette } from "@/components/silhouette";
 import { PageTitle, Section, Skeleton, Stat, TextLink } from "@/components/ui";
 import { db } from "@/db";
-import { activities, type PlanWeek } from "@/db/schema";
+import { activities } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
 import { addDays, diffDays, formatDay, startOfWeek, todayLocal } from "@/lib/dates";
 import { getActivePlan, getWeeks, workoutsBetween } from "@/lib/plan-store";
@@ -70,15 +70,43 @@ async function Plan() {
   }
 
   const end = addDays(weeks.at(-1)!.startDate, 6);
-  const [workouts, done] = await Promise.all([
+  const [workouts, recordedActivities] = await Promise.all([
     workoutsBetween(plan.id, weeks[0].startDate, end),
     db
-      .select({ date: activities.localDate, sec: activities.durationSec })
+      .select({
+        id: activities.id,
+        localDate: activities.localDate,
+        name: activities.name,
+        sport: activities.sport,
+        durationSec: activities.durationSec,
+      })
       .from(activities)
-      .where(and(gte(activities.localDate, weeks[0].startDate), lte(activities.localDate, today))),
+      .where(between(activities.localDate, weeks[0].startDate, end))
+      .orderBy(desc(activities.startTime)),
   ]);
-  const doneHours = (w: PlanWeek) =>
-    done.filter((a) => a.date >= w.startDate && a.date <= addDays(w.startDate, 6)).reduce((s, a) => s + a.sec, 0) / 3600;
+  const scheduledActivityIds = new Set(workouts.map((workout) => workout.activityId));
+  const schedule = [
+    ...workouts.map((workout) => ({
+      ...workout,
+      href: `/workout/${workout.id}`,
+      unplanned: false,
+      muted: workout.status === "missed" || workout.status === "skipped",
+    })),
+    ...recordedActivities
+      .filter((activity) => activity.sport === "run" && !scheduledActivityIds.has(activity.id))
+      .map((activity) => ({
+        id: activity.id,
+        date: activity.localDate,
+        title: activity.name,
+        href: `/activities/${activity.id}`,
+        unplanned: true,
+        status: "completed",
+        structure: [],
+        type: "easy",
+        plannedDurationSec: activity.durationSec,
+        muted: true,
+      })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
   const thisWeek = startOfWeek(today);
   const maxHours = Math.max(...weeks.map((w) => w.targetHours), 1);
 
@@ -129,10 +157,14 @@ async function Plan() {
       <Section title="Weeks">
         <ol className="space-y-2">
           {weeks.map((w) => {
-            const isPast = addDays(w.startDate, 6) < today;
+            const weekEnd = addDays(w.startDate, 6);
+            const isPast = weekEnd < today;
             const isCurrent = w.startDate === thisWeek;
-            const items = workouts.filter((x) => x.date >= w.startDate && x.date <= addDays(w.startDate, 6));
-            const hoursDone = doneHours(w);
+            const items = schedule.filter((x) => x.date >= w.startDate && x.date <= weekEnd);
+            const recorded = recordedActivities.filter((a) => a.localDate >= w.startDate && a.localDate <= weekEnd);
+            const hoursDone = recorded
+              .filter((a) => a.localDate <= today)
+              .reduce((sum, a) => sum + a.durationSec, 0) / 3600;
             return (
               <li key={w.id}>
                 <details open={isCurrent || (!isPast && w.startDate <= addDays(thisWeek, 7))} className="group rounded-2xl bg-paper">
@@ -168,7 +200,10 @@ async function Plan() {
                       <ul className="mt-2 divide-y divide-line">
                         {items.map((x) => (
                           <li key={x.id}>
-                            <Link href={`/workout/${x.id}`} className="flex items-center gap-3 py-2.5">
+                            <Link
+                              href={x.href}
+                              className={`relative isolate flex items-center gap-3 py-2.5 ${x.unplanned ? "before:pointer-events-none before:absolute before:inset-y-1 before:-inset-x-2 before:-z-10 before:rounded-lg before:bg-line/35" : ""}`}
+                            >
                               <span className="w-12 shrink-0 text-sm text-muted">{formatDay(x.date, { weekday: "short" })}</span>
                               <span className={`min-w-0 flex-1 truncate ${x.status === "skipped" || x.status === "missed" ? "text-muted line-through" : ""}`}>
                                 {x.title}
@@ -180,7 +215,7 @@ async function Plan() {
                                 height={18}
                                 gap={1}
                                 className="w-16 shrink-0"
-                                muted={x.status === "missed" || x.status === "skipped"}
+                                muted={x.muted}
                               />
                               <span className="num w-12 shrink-0 text-right">
                                 {x.status === "completed" ? "✓" : x.plannedDurationSec ? compactDuration(x.plannedDurationSec) : ""}

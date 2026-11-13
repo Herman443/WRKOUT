@@ -1,9 +1,11 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { PaceProfile } from "@/components/pace-profile";
+import { RecordedRuns } from "@/components/recorded-runs";
 import { SubmitButton } from "@/components/submit-button";
 import { TreadmillCorrection } from "@/components/treadmill-correction";
 import { Field, Panel, Section, Skeleton, Stat, inputClass } from "@/components/ui";
@@ -39,6 +41,18 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
   const guessed = treadmill && !paceTrusted(a);
   const incline = treadmill ? averageIncline(a.laps) : null;
   const lapIncline = a.laps.some((l) => l.inclinePct != null);
+  const otherRuns = a.sport === "run"
+    ? await db.select({
+      id: activities.id,
+      localDate: activities.localDate,
+      name: activities.name,
+      startTime: activities.startTime,
+      distanceM: activities.distanceM,
+      durationSec: activities.durationSec,
+    }).from(activities)
+      .where(and(eq(activities.localDate, a.localDate), eq(activities.sport, "run"), ne(activities.id, id)))
+      .orderBy(desc(activities.startTime))
+    : [];
 
   return (
     <>
@@ -70,6 +84,13 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
         {a.load != null && <Stat value={Math.round(a.load)} label="Training load" />}
         {a.compliance && <Stat value={a.compliance.score} label="Plan match" />}
       </div>
+
+      {a.sport === "run" && <PaceProfile laps={a.laps} estimated={guessed} />}
+      {otherRuns.length > 0 && (
+        <Section title="Other runs that day">
+          <RecordedRuns runs={otherRuns} />
+        </Section>
+      )}
 
       {treadmill && guessed && <TreadmillCorrection activity={a} />}
 

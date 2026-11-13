@@ -1,18 +1,27 @@
 import { Check } from "lucide-react";
 import Link from "next/link";
-import type { PlannedWorkout } from "@/db/schema";
+import type { Activity, PlannedWorkout } from "@/db/schema";
 import { addDays, WEEKDAYS } from "@/lib/dates";
+import { compactDuration } from "@/lib/training/vdot";
+import { RecordedRuns } from "./recorded-runs";
 import { Silhouette } from "./silhouette";
 
-/** Monday–Sunday, each day showing its main session as a tiny silhouette. */
-export function WeekStrip({ weekStart, today, workouts }: { weekStart: string; today: string; workouts: PlannedWorkout[] }) {
+/** Monday–Sunday, showing recorded runs or the day's planned session. */
+export function WeekStrip({ weekStart, today, workouts, runs }: {
+  weekStart: string;
+  today: string;
+  workouts: PlannedWorkout[];
+  runs: Pick<Activity, "id" | "localDate" | "name" | "durationSec" | "distanceM" | "startTime">[];
+}) {
   return (
-    <ol className="grid grid-cols-7 gap-1.5">
+    <ol className="relative grid grid-cols-7 gap-1.5">
       {WEEKDAYS.map((d, i) => {
         const date = addDays(weekStart, i);
         const day = workouts.filter((w) => w.date === date && w.status !== "skipped");
         const main = day.find((w) => w.sport !== "strength") ?? day[0];
-        const done = main?.status === "completed";
+        const dayRuns = runs.filter((run) => run.localDate === date);
+        const run = dayRuns[0];
+        const done = !!run || main?.status === "completed";
         const faded = main?.status === "missed" || (date < today && !done);
         const isToday = date === today;
         const inner = (
@@ -24,7 +33,11 @@ export function WeekStrip({ weekStart, today, workouts }: { weekStart: string; t
               <span className="num text-xs text-ink">{Number(date.slice(8))}</span>
             </div>
             <div className="mt-auto">
-              {main ? (
+              {run ? (
+                <div className="num text-center text-xs">
+                  {dayRuns.length > 1 ? `${dayRuns.length} runs` : run.distanceM ? `${(run.distanceM / 1000).toFixed(1)} km` : compactDuration(run.durationSec)}
+                </div>
+              ) : main ? (
                 <Silhouette
                   structure={main.structure}
                   type={main.type}
@@ -44,7 +57,20 @@ export function WeekStrip({ weekStart, today, workouts }: { weekStart: string; t
         );
         return (
           <li key={date}>
-            {main ? (
+            {dayRuns.length > 1 ? (
+              <details name="week-strip-runs">
+                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  {inner}
+                </summary>
+                <div className="absolute inset-x-0 z-10 mt-2 rounded-xl border border-line bg-paper px-3 shadow-lg">
+                  <RecordedRuns runs={dayRuns} />
+                </div>
+              </details>
+            ) : run ? (
+              <Link href={`/activities/${run.id}`} aria-label={`${d} ${date}: ${run.name}, completed`}>
+                {inner}
+              </Link>
+            ) : main ? (
               <Link href={`/workout/${main.id}`} aria-label={`${d} ${date}: ${main.title}`}>
                 {inner}
               </Link>
