@@ -3,7 +3,7 @@ import { LoginForm } from "./login-form";
 
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6 pt-[calc(1.25rem+env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)]">
       <Mark />
       <h1 className="mt-8 text-3xl font-semibold tracking-tight">WRKOUT</h1>
       <p className="mt-1 text-muted">Your training, planned and adjusted.</p>
