@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { plannedWorkouts } from "@/db/schema";
 import { addDays, diffDays, localTime, startOfWeek, todayLocal, weekday } from "./dates";
 import { env } from "./env";
-import { fetchDailyHealth, getKv, pollGarmin, setKv } from "./ingest";
+import { fetchDailyHealth, getKv, logUnsyncedTreadmillSessions, pollGarmin, setKv } from "./ingest";
 import { enqueue, hasOpenJob, kickWorker } from "./jobs";
 import { getActivePlan, getWeeks, workoutsBetween } from "./plan-store";
 import { sendPush } from "./push";
@@ -25,6 +25,7 @@ export async function tick(now = new Date()) {
   };
 
   if (env.garminApiKey && hour >= 5) await step("garmin", async () => (await pollGarmin()).length);
+  await step("treadmill", () => logUnsyncedTreadmillSessions(now));
 
   if (env.garminApiKey && hour >= 7 && (await getKv<string>("health_date")) !== today) {
     await step("health", async () => {

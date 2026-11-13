@@ -1,11 +1,12 @@
 import { desc } from "drizzle-orm";
 import Link from "next/link";
 import { Suspense } from "react";
-import { PageTitle, Skeleton } from "@/components/ui";
+import { PageTitle, Skeleton, StartTreadmill } from "@/components/ui";
 import { db } from "@/db";
 import { activities } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
 import { formatDay } from "@/lib/dates";
+import { isTreadmill, paceTrusted } from "@/lib/training/treadmill";
 import { compactDuration } from "@/lib/training/vdot";
 
 export default function ActivitiesPage() {
@@ -21,7 +22,10 @@ async function Activities() {
   const rows = await db.select().from(activities).orderBy(desc(activities.startTime)).limit(60);
   return (
     <>
-      <PageTitle sub="Synced from Garmin and Strava">Activities</PageTitle>
+      <div className="flex items-end justify-between gap-4">
+        <PageTitle sub="Synced from Garmin and Strava">Activities</PageTitle>
+        <StartTreadmill quiet>Treadmill run</StartTreadmill>
+      </div>
       {rows.length === 0 ? (
         <p className="mt-4 text-muted">Nothing synced yet. New sessions appear here within about 15 minutes of reaching Garmin.</p>
       ) : (
@@ -40,6 +44,7 @@ async function Activities() {
                         : a.analysisStatus === "failed"
                           ? "Analysis failed"
                           : "Logged"}
+                    {a.sport === "run" && isTreadmill(a.subSport) && !paceTrusted(a) && <span className="text-warn">, check treadmill distance</span>}
                   </span>
                 </span>
                 <span className="num shrink-0 text-right text-lg">

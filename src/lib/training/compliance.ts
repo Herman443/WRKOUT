@@ -6,6 +6,8 @@ export interface Lap {
   distanceM: number;
   avgHr?: number | null;
   avgPower?: number | null;
+  /** Treadmill incline, % */
+  inclinePct?: number | null;
 }
 
 export interface ActivityForCompliance {
@@ -14,6 +16,8 @@ export interface ActivityForCompliance {
   laps: Lap[];
   /** Seconds in HR zones Z1..Z5 */
   hrZoneSeconds?: number[] | null;
+  /** False for a treadmill run whose distance is still the watch's guess */
+  paceTrusted?: boolean;
 }
 
 export interface Compliance {
@@ -54,7 +58,7 @@ export function computeCompliance(planned: PlannedLite, a: ActivityForCompliance
     intensity = Math.max(0, Math.min(100, Math.round(((low - 0.4) / 0.4) * 100)));
     if (low < 0.8) notes.push(`Only ${Math.round(low * 100)}% of time in Z1–Z2 on an easy session`);
   } else if (QUALITY_TYPES.has(planned.type) && a.laps.length > 0) {
-    intensity = workTargetScore(planned, a.laps, notes);
+    intensity = workTargetScore(planned, a.laps, notes, a.paceTrusted ?? true);
   }
 
   const score = intensity === null ? volume : Math.round(volume * 0.4 + intensity * 0.6);
@@ -62,7 +66,7 @@ export function computeCompliance(planned: PlannedLite, a: ActivityForCompliance
 }
 
 /** Share of the planned work time that laps actually spent inside the work target band. */
-function workTargetScore(planned: PlannedLite, laps: Lap[], notes: string[]): number | null {
+function workTargetScore(planned: PlannedLite, laps: Lap[], notes: string[], paceTrusted: boolean): number | null {
   const work = flattenSteps(planned.structure).filter((s) => s.kind === "work");
   const paceTargets = work.filter((s) => s.target.type === "pace" && s.target.low && s.target.high);
   const powerTargets = work.filter((s) => s.target.type === "power" && s.target.low && s.target.high);
@@ -75,7 +79,10 @@ function workTargetScore(planned: PlannedLite, laps: Lap[], notes: string[]): nu
   if (plannedWorkSec <= 0) return null;
 
   let inTarget = 0;
-  if (paceTargets.length) {
+  if (paceTargets.length && !paceTrusted) {
+    notes.push("Treadmill pace not checked: the watch distance is a guess until the belt speeds are entered");
+    return null;
+  } else if (paceTargets.length) {
     const lo = Math.min(...paceTargets.map((s) => s.target.low!)) - 5;
     const hi = Math.max(...paceTargets.map((s) => s.target.high!)) + 5;
     for (const lap of laps) {

@@ -3,14 +3,16 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { SubmitButton } from "@/components/submit-button";
-import { Panel, PageTitle, Section, Skeleton, TextLink } from "@/components/ui";
+import { Panel, PageTitle, Section, Skeleton, StartTreadmill, TextLink } from "@/components/ui";
 import { WeekStrip } from "@/components/week-strip";
 import { WorkoutHero } from "@/components/workout-hero";
 import { db } from "@/db";
 import { activities, analyses, dailyHealth, planChanges } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
 import { addDays, formatDay, startOfWeek, todayLocal } from "@/lib/dates";
+import { getKv } from "@/lib/ingest";
 import { getActivePlan, workoutsBetween } from "@/lib/plan-store";
+import type { RunSurface } from "@/lib/training/treadmill";
 import { formatDuration } from "@/lib/training/vdot";
 import { retryPlan } from "./actions";
 
@@ -72,11 +74,12 @@ async function Today() {
   }
 
   const weekStart = startOfWeek(today);
-  const [week, [health], pending, [latest]] = await Promise.all([
+  const [week, [health], pending, [latest], surface] = await Promise.all([
     workoutsBetween(plan.id, weekStart, addDays(weekStart, 6)),
     db.select().from(dailyHealth).where(eq(dailyHealth.date, today)),
     db.select({ id: planChanges.id }).from(planChanges).where(eq(planChanges.status, "pending")),
     db.select().from(analyses).orderBy(desc(analyses.createdAt)).limit(1),
+    getKv<RunSurface>("run_surface").then((s) => s ?? "outdoor"),
   ]);
   const todays = week.filter((w) => w.date === today && w.status !== "skipped");
   const main = todays.find((w) => w.status === "planned") ?? todays[0];
@@ -112,7 +115,14 @@ async function Today() {
           ) : (
             <p className="mt-1 text-muted">{main.key ? "Key session" : sessionKind(main.type)}</p>
           )}
-          <WorkoutHero workout={main} />
+          <WorkoutHero workout={main} surface={surface} />
+          {main.sport === "run" && main.status === "planned" && (
+            <div className="mt-6">
+              <StartTreadmill workoutId={main.id} quiet={surface !== "treadmill"}>
+                Start on the treadmill
+              </StartTreadmill>
+            </div>
+          )}
           {todays.length > 1 && (
             <p className="mt-4 text-sm text-muted">
               Also today:{" "}
@@ -136,7 +146,7 @@ async function Today() {
               <Link href={`/workout/${next.id}`} className="mt-1 block text-lg font-medium">
                 {next.title}
               </Link>
-              <WorkoutHero workout={next} compact />
+              <WorkoutHero workout={next} compact surface={surface} />
             </Panel>
           )}
         </article>
@@ -177,6 +187,11 @@ async function Today() {
       )}
 
       <p className="mt-10 text-sm text-muted">
+        <Link href="/treadmill" className="text-ink underline decoration-line underline-offset-4">
+          Treadmill run without a plan
+        </Link>
+      </p>
+      <p className="mt-3 text-sm text-muted">
         {goal.name}, {formatDay(goal.eventDate, { day: "numeric", month: "long", year: "numeric" })}
       </p>
     </>

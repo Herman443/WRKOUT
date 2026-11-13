@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { activities, analyses, plannedWorkouts } from "@/db/schema";
+import { averageIncline, isTreadmill, treadmillCorrection } from "../training/treadmill";
 import { formatDuration, formatPace } from "../training/vdot";
 import { changeSetSchema } from "../training/changes";
 import { getActivePlan, applyOrPropose } from "../plan-store";
@@ -51,6 +52,23 @@ function describeActivity(a: typeof activities.$inferSelect) {
           .join("; "),
     );
   const extra = a.extra as Record<string, unknown>;
+  if (isTreadmill(a.subSport)) {
+    const fix = treadmillCorrection(extra);
+    const incline = averageIncline(a.laps);
+    lines.push(
+      fix
+        ? `Treadmill run. Distance and lap paces come from the belt (${
+            fix.method === "session"
+              ? "speed and incline tracked live in the app, one lap per planned step"
+              : fix.method === "laps"
+                ? "speed entered per lap"
+                : "treadmill's total distance"
+          }${a.source === "manual" ? "; not recorded on the watch, so no heart rate" : `; the watch had guessed ${fix.originalDistanceM ? `${(fix.originalDistanceM / 1000).toFixed(2)} km` : "no distance"}`})` +
+            (incline != null ? `, average incline ${incline}%` : "") +
+            ". Pace targets are flat-ground paces; 1% incline roughly matches running outside."
+        : "Treadmill run, not yet corrected: distance and pace are the watch's guess from arm swing and are often 5-10% off. Judge it by duration, heart rate and feel, not pace, and do not change paces or zones because of it.",
+    );
+  }
   if (extra.aerobicTrainingEffect) lines.push(`Garmin training effect: aerobic ${extra.aerobicTrainingEffect}, anaerobic ${extra.anaerobicTrainingEffect}`);
   if (a.rpe || a.feel || a.notes) lines.push(`Athlete feedback: ${[a.rpe && `RPE ${a.rpe}`, a.feel, a.notes].filter(Boolean).join(", ")}`);
   return lines.join("\n");

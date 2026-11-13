@@ -11,6 +11,8 @@ export interface FitSummary {
   normalizedPowerW: number | null;
   avgPowerW: number | null;
   hrZoneSeconds: number[] | null;
+  /** [epoch ms, bpm] per record, for laps rebuilt elsewhere (treadmill sessions) */
+  hrSamples: [number, number][];
 }
 
 function fitBytes(file: Uint8Array): Uint8Array {
@@ -57,10 +59,18 @@ export function parseFit(file: Uint8Array, hrZones?: Zone[] | null): FitSummary 
     hrZoneSeconds = hrZoneSeconds.map(Math.round);
   }
 
+  const hrSamples: [number, number][] = [];
+  for (const r of records) {
+    const hr = num(r.heartRate);
+    const t = r.timestamp as Date | undefined;
+    if (hr && t) hrSamples.push([t.getTime(), hr]);
+  }
+
   return {
     laps,
     normalizedPowerW: num(session.normalizedPower),
     avgPowerW: num(session.avgPower),
     hrZoneSeconds,
+    hrSamples,
   };
 }

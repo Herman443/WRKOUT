@@ -5,11 +5,13 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { SubmitButton } from "@/components/submit-button";
+import { TreadmillCorrection } from "@/components/treadmill-correction";
 import { Field, Panel, Section, Skeleton, Stat, inputClass } from "@/components/ui";
 import { db } from "@/db";
 import { activities, analyses, planChanges, plannedWorkouts } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
 import { formatDay } from "@/lib/dates";
+import { averageIncline, formatKmh, isTreadmill, paceTrusted } from "@/lib/training/treadmill";
 import { formatDuration, formatPace } from "@/lib/training/vdot";
 import { saveFeedback } from "../../actions";
 
@@ -33,6 +35,10 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
   const pace = a.sport === "run" && a.distanceM ? (a.movingSec ?? a.durationSec) / (a.distanceM / 1000) : null;
   const speed = a.sport === "bike" && a.distanceM ? a.distanceM / 1000 / ((a.movingSec ?? a.durationSec) / 3600) : null;
   const working = a.analysisStatus === "pending" || a.analysisStatus === "running";
+  const treadmill = a.sport === "run" && isTreadmill(a.subSport);
+  const guessed = treadmill && !paceTrusted(a);
+  const incline = treadmill ? averageIncline(a.laps) : null;
+  const lapIncline = a.laps.some((l) => l.inclinePct != null);
 
   return (
     <>
@@ -53,15 +59,19 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
       <h1 className="mt-0.5 text-[30px] leading-tight font-semibold tracking-tight">{a.name}</h1>
 
       <div className="mt-6 grid grid-cols-3 gap-y-5">
-        {a.distanceM && <Stat value={(a.distanceM / 1000).toFixed(2)} unit="km" label="Distance" />}
+        {a.distanceM && <Stat value={(a.distanceM / 1000).toFixed(2)} unit="km" label={guessed ? "Watch's guess" : "Distance"} />}
         <Stat value={formatDuration(a.movingSec ?? a.durationSec)} label="Time" />
         {pace && <Stat value={formatPace(pace)} unit="/km" label="Pace" />}
+        {treadmill && pace && <Stat value={formatKmh(3600 / pace)} unit="km/h" label="Belt speed" />}
+        {incline != null && <Stat value={incline} unit="%" label="Incline" />}
         {speed && <Stat value={speed.toFixed(1)} unit="km/h" label="Speed" />}
         {a.avgHr && <Stat value={a.avgHr} unit="bpm" label="Avg heart rate" />}
         {a.normalizedPowerW && <Stat value={a.normalizedPowerW} unit="W" label="Normalised power" />}
         {a.load != null && <Stat value={Math.round(a.load)} label="Training load" />}
         {a.compliance && <Stat value={a.compliance.score} label="Plan match" />}
       </div>
+
+      {treadmill && guessed && <TreadmillCorrection activity={a} />}
 
       <Section title="Coach's analysis">
         {analysis ? (
@@ -160,6 +170,8 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
                 <th className="font-normal">Time</th>
                 <th className="font-normal">Dist</th>
                 <th className="font-normal">{a.sport === "bike" ? "Power" : "Pace"}</th>
+                {treadmill && <th className="font-normal">km/h</th>}
+                {lapIncline && <th className="font-normal">Incl.</th>}
                 <th className="font-normal">HR</th>
               </tr>
             </thead>
@@ -170,6 +182,8 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
                   <td>{formatDuration(l.durationSec)}</td>
                   <td>{l.distanceM ? (l.distanceM / 1000).toFixed(2) : ""}</td>
                   <td>{a.sport === "bike" ? (l.avgPower ? Math.round(l.avgPower) : "") : l.distanceM ? formatPace(l.durationSec / (l.distanceM / 1000)) : ""}</td>
+                  {treadmill && <td>{l.distanceM && l.durationSec ? formatKmh(l.distanceM / 1000 / (l.durationSec / 3600)) : ""}</td>}
+                  {lapIncline && <td>{l.inclinePct != null ? `${l.inclinePct}%` : ""}</td>}
                   <td>{l.avgHr ? Math.round(l.avgHr) : ""}</td>
                 </tr>
               ))}
@@ -177,6 +191,8 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
           </table>
         </Section>
       )}
+
+      {treadmill && !guessed && <TreadmillCorrection activity={a} />}
     </>
   );
 }
