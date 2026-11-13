@@ -8,13 +8,26 @@ import { env } from "./env";
 // generation can take minutes, so each job runs in its own invocation of
 // /api/jobs/run, which re-triggers itself while work remains.
 
+// Local dev and production share one database, so each job records the server that queued
+// it and only that server runs it. Otherwise the production cron can pick up a job queued
+// from localhost (or the other way round) and run it with different code.
+const ORIGIN_KEY = "origin";
+const origin = () => env.appUrl;
+const isLocal = () => !process.env.VERCEL && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(env.appUrl);
+
 export async function enqueue(kind: JobKind, payload: Record<string, unknown> = {}, delayMs = 0) {
   const [job] = await db
     .insert(jobs)
-    .values({ kind, payload, runAfter: new Date(Date.now() + delayMs) })
+    .values({ kind, payload: { ...payload, [ORIGIN_KEY]: origin() }, runAfter: new Date(Date.now() + delayMs) })
     .returning();
   return job;
 }
+
+/** Jobs this server may run: its own, plus untagged ones from before tagging (production only). */
+const ownJobs = () =>
+  isLocal()
+    ? sql`payload->>${ORIGIN_KEY} = ${origin()}`
+    : sql`(payload->>${ORIGIN_KEY} = ${origin()} or payload->>${ORIGIN_KEY} is null)`;
 
 export async function hasOpenJob(kind: JobKind, match?: (payload: Record<string, unknown>) => boolean) {
   const open = await db
@@ -43,13 +56,13 @@ async function claim() {
   await db
     .update(jobs)
     .set({ status: "queued" })
-    .where(and(eq(jobs.status, "running"), lt(jobs.updatedAt, new Date(Date.now() - 6 * 60 * 1000))));
+    .where(and(eq(jobs.status, "running"), lt(jobs.updatedAt, new Date(Date.now() - 6 * 60 * 1000)), ownJobs()));
 
   const rows = await db.execute<{ id: string }>(sql`
     update wrkout.jobs set status = 'running', attempts = attempts + 1, updated_at = now()
     where id = (
       select id from wrkout.jobs
-      where status = 'queued' and run_after <= now()
+      where status = 'queued' and run_after <= now() and ${ownJobs()}
       order by created_at
       for update skip locked
       limit 1
@@ -75,14 +88,18 @@ export async function runOneJob(): Promise<boolean> {
     const message = e instanceof Error ? e.message : String(e);
     console.error(`job ${job.kind} failed`, e);
     const retry = job.attempts < 3;
+    const delayMs = 2 ** job.attempts * 60 * 1000;
     await db
       .update(jobs)
       .set({
         status: retry ? "queued" : "failed",
         error: message,
-        runAfter: new Date(Date.now() + 2 ** job.attempts * 60 * 1000),
+        runAfter: new Date(Date.now() + delayMs),
       })
       .where(eq(jobs.id, job.id));
+    // Production's cron retries every 15 minutes; a local dev server has no cron, so it
+    // wakes itself when the retry is due (the dev server is long-lived, unlike a function).
+    if (retry && isLocal()) setTimeout(() => void kickWorker(), delayMs + 1000).unref?.();
     if (!retry) await onFinalFailure(job.kind, job.payload, message);
   }
   return true;
