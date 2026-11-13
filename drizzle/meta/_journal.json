@@ -15,6 +15,13 @@
       "when": 1794586368616,
       "tag": "0001_treadmill_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794588480250,
+      "tag": "0002_app_feedback",
+      "breakpoints": true
     }
   ]
 }

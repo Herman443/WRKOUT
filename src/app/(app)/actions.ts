@@ -8,6 +8,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import {
   activities,
+  appFeedback,
   athleteProfile,
   coachMessages,
   goals,
@@ -246,6 +247,17 @@ export async function saveFeedback(form: FormData) {
     after(kickWorker);
   }
   revalidatePath(`/activities/${id}`);
+}
+
+// ---------- app feedback ----------
+
+/** A note about the app itself, from the feedback button on every page. */
+export async function sendAppFeedback(input: { body: string; page: string }): Promise<{ ok: boolean }> {
+  await requireSession();
+  const body = input.body.trim().slice(0, 4000);
+  if (!body) return { ok: false };
+  await db.insert(appFeedback).values({ body, page: input.page.slice(0, 200) || null });
+  return { ok: true };
 }
 
 // ---------- treadmill ----------

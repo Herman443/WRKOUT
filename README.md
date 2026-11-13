@@ -9,6 +9,7 @@ A private, phone-first training app. You pick a race, describe your week and how
 - **Treadmill runs** — switch a run session to *Treadmill* and its targets show as belt speed (km/h). A treadmill run's watch distance is treated as a guess (load from heart rate, pace not scored) until you enter what the treadmill showed, in total or lap by lap with incline; incline counts towards load.
 - **Live treadmill sessions** — start a planned run (or an unplanned one) on the treadmill in the app. The live screen counts down each step and sets the speed it plans; you nudge speed and incline when you run faster or slower. When the watch's run syncs, its distance, laps (one per step, with the watch's heart rate) and incline come from the session; a session not recorded on the watch becomes an activity of its own.
 - **Coach chat** — tell it about soreness, travel or a bad night and it adapts the plan.
+- **App feedback** — the lightbulb in the top corner of every page saves a note about the app, with the page it was written on, for reading back while developing.
 - **Strava through Claude** — the coach can look up your Strava history through Strava's official MCP server.
 
 ## How it fits together
@@ -124,6 +125,16 @@ Notes:
 - **Strava MCP.** The MCP connector needs Anthropic's own API behind the gateway. If the gateway routes Claude through Bedrock or Vertex, the coach runs on Garmin data only.
 - **Inherited variables.** A variable already set in your shell overrides `.env.local`. Terminals started from the Claude desktop app inherit its own `ANTHROPIC_BASE_URL`, so run local commands from a regular terminal.
 - **Switching later.** To move to a private Claude API key, remove `ANTHROPIC_BASE_URL` and set your own `ANTHROPIC_API_KEY`.
+
+## Reading app feedback
+
+```bash
+npm run feedback
+```
+
+Prints the open notes from the lightbulb button, read from the database in `.env.local` (production, usually).
+- `-- --all` includes notes already marked done; `-- --json` prints JSON.
+- `-- --done <id> …` marks notes done; `-- --done` alone marks every open note done.
 
 ## Local development
 

@@ -17,6 +17,7 @@
     "seed:demo": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-demo.ts",
     "spike:garmin": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/garmin-spike.ts",
     "try:plan": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/try-plan.ts",
+    "feedback": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/feedback.ts",
     "icons": "tsx scripts/generate-icons.tsx",
     "check:claude": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/check-claude.ts"
   },

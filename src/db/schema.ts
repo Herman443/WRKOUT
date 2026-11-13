@@ -298,6 +298,20 @@ export const aiCalls = app.table("ai_calls", {
   createdAt: createdAt(),
 });
 
+/** Notes the athlete jots down about the app itself, read back with `npm run feedback`. */
+export const appFeedback = app.table(
+  "app_feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    body: text("body").notNull(),
+    /** Path the note was written on */
+    page: text("page"),
+    status: text("status").$type<"open" | "done">().default("open").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("app_feedback_status_idx").on(t.status, t.createdAt)],
+);
+
 export type AthleteProfile = typeof athleteProfile.$inferSelect;
 export type Goal = typeof goals.$inferSelect;
 export type Plan = typeof plans.$inferSelect;
