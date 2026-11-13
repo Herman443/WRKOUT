@@ -48,3 +48,12 @@ export function isCronRequest(request: Request): boolean {
   const actual = Buffer.from(header);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
+
+/** Constant-time check of the connector's secret path segment against MCP_SECRET. */
+export function isMcpSecret(candidate: string): boolean {
+  const secret = env.mcpSecret;
+  if (!secret) return false;
+  const expected = Buffer.from(secret);
+  const actual = Buffer.from(candidate);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}

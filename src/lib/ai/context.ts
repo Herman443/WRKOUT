@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, desc, eq, gte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, coachMessages, dailyHealth, planChanges } from "@/db/schema";
 import { deriveMarkers } from "../athlete";
@@ -29,7 +29,7 @@ export async function fitnessToday() {
 }
 
 /** Plain-text snapshot of everything the coach needs to know right now. */
-export async function buildContext(opts: { upcomingDays?: number } = {}): Promise<string> {
+export async function buildContext(opts: { upcomingDays?: number; excludeStrava?: boolean } = {}): Promise<string> {
   const today = todayLocal();
   const profile = await getProfile();
   const m = deriveMarkers(profile);
@@ -117,7 +117,12 @@ export async function buildContext(opts: { upcomingDays?: number } = {}): Promis
   const recent = await db
     .select()
     .from(activities)
-    .where(gte(activities.localDate, addDays(today, -28)))
+    .where(
+      and(
+        gte(activities.localDate, addDays(today, -28)),
+        opts.excludeStrava ? ne(activities.source, "strava") : undefined,
+      ),
+    )
     .orderBy(asc(activities.startTime));
   if (recent.length) {
     out.push("\n## Completed activities (last 28 days)");

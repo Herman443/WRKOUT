@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isValidSession, SESSION_COOKIE } from "@/lib/session";
 
 // Paths reachable without a session. Machine endpoints authenticate themselves.
-const PUBLIC_PREFIXES = ["/login", "/api/cron/", "/api/jobs/", "/api/strava/webhook"];
+const PUBLIC_PREFIXES = ["/login", "/api/cron/", "/api/jobs/", "/api/mcp/", "/api/strava/webhook"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

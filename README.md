@@ -10,7 +10,7 @@ A private, phone-first training app. You pick a race, describe your week and how
 - **Live treadmill sessions** — start a planned run (or an unplanned one) on the treadmill in the app. The live screen counts down each step and sets the speed it plans; you nudge speed and incline when you run faster or slower. When the watch's run syncs, its distance, laps (one per step, with the watch's heart rate) and incline come from the session; a session not recorded on the watch becomes an activity of its own.
 - **Coach chat** — tell it about soreness, travel or a bad night and it adapts the plan.
 - **App feedback** — the lightbulb in the top corner of every page saves a note about the app, with the page it was written on, for reading back while developing.
-- **Strava through Claude** — the coach can look up your Strava history through Strava's official MCP server.
+- **Claude app connector** — add WRKOUT as a custom connector in the Claude app, next to Strava's official connector, and talk to Claude about your training with both. Claude can import Strava sessions into WRKOUT (so they count towards load and plan matching) and propose plan changes, which you approve in WRKOUT.
 
 ## How it fits together
 
@@ -19,7 +19,8 @@ Phone (PWA + Web Push) ─► Next.js on Vercel (wrkout.hermanostengen.com)
                               ├─ Supabase Postgres (schema "wrkout") + pg_cron → /api/cron/tick every 15 min
                               ├─ Garmin Connect Personal API (activities, FIT files, sleep, HRV)
                               ├─ Claude API (claude-opus-5-5) + MCP connector → mcp.strava.com
-                              └─ Strava webhook (optional trigger only)
+                              ├─ Strava webhook (optional trigger only)
+                              └─ /api/mcp/<secret> ◄─ Claude app custom connector (alongside Strava's connector)
 ```
 
 | Path | What lives there |
@@ -27,14 +28,15 @@ Phone (PWA + Web Push) ─► Next.js on Vercel (wrkout.hermanostengen.com)
 | `src/lib/training/` | Pure training science: VDOT, zones, load (TSS/CTL/ATL/ACWR), matching, compliance, guardrails, change scoping. Unit-tested. |
 | `src/lib/ai/` | Coach prompt, context builder, plan generation, activity analysis, weekly review, coach replies. |
 | `src/lib/garmin/` | Personal API client, activity mapping, FIT parsing. |
-| `src/lib/strava/` | OAuth (dynamic client registration + PKCE) for Strava's MCP server. |
+| `src/lib/strava/` | OAuth (dynamic client registration + PKCE) for Strava's MCP server. Strava currently refuses outside clients, so this is dormant. |
+| `src/lib/mcp/`, `src/app/api/mcp/` | WRKOUT's own MCP server for the Claude app's custom connector. |
 | `src/lib/jobs.ts`, `src/lib/tick.ts` | Durable job queue and the 15-minute scheduler. |
 | `src/app/` | Pages (Today, Plan, Workout, Activities, Coach, Settings, Onboarding) and API routes. |
 
 ### Why it's built this way
 
 - **Garmin is the data source.** Garmin's Personal API (opened October 2026) is free and official, but read-only and pull-only — hence polling, and no pushing workouts to the watch (yet).
-- **Strava data only reaches the AI through Strava's MCP server.** Strava's API policy (June 2026) bans feeding Strava API data to AI apps; its MCP connector is the sanctioned route. The webhook is only used as a "something new happened" trigger.
+- **Strava data only reaches the AI through Strava's MCP server.** Strava's API policy (June 2026) bans feeding Strava API data to AI apps; its MCP connector is the sanctioned route. The webhook is only used as a "something new happened" trigger. Strava's MCP server only accepts its approved assistants (the Claude apps, Claude Code, Gemini) and refuses WRKOUT's client registration, so the Strava + WRKOUT combination happens in the Claude app instead: WRKOUT is a second connector there, serving only its own data (no `source = 'strava'` rows, per §5.16).
 - **Guardrails in code, judgement in Claude.** Ramp rate, deload frequency, taper, quality-session caps and hard-day spacing are checked in code; failing plans are sent back to Claude once for a fix.
 - **Each long AI step runs in its own function invocation** (job queue), so nothing hits Vercel's 300-second limit.
 
@@ -69,14 +71,19 @@ You need: a GitHub repo (this one), and free Vercel and Supabase accounts. You a
    - Open the site in Safari, then Share → *Add to Home Screen*.
    - Open WRKOUT from the home screen and sign in.
    - In Settings, choose *Turn on notifications*, then *Send a test*.
-9. **Strava (optional, experimental).** In Settings → *Connect Strava*, approve access on Strava. To confirm Claude can reach it, run:
+9. **Strava (optional, experimental).** Strava currently refuses outside clients on its MCP server, so this step is likely to fail; step 10 is the working route. In Settings → *Connect Strava*, approve access on Strava. To confirm Claude can reach it, run:
    ```bash
    npm run check:claude -- --strava
    ```
    Run it locally with the production env.
 
    If Strava refuses the connection, everything else keeps working on Garmin data alone.
-10. **Strava webhook (optional).** This catches sessions recorded in the Strava app rather than on the watch.
+10. **Claude app connector (optional).** Set `MCP_SECRET` (from `npm run setup:secrets`). Settings then shows the connector URL.
+    - In Claude, go to Settings → Connectors → *Add custom connector*, paste the URL, and leave the OAuth fields empty.
+    - Add Strava's connector there too, then ask Claude about your training. Connectors sync to the phone app.
+    - To bring Strava sessions in, ask e.g. *"Import my Strava activities from the last two weeks into WRKOUT."* Sessions the watch already sent through Garmin are linked, not duplicated, and only sessions from the last two days get an automatic analysis.
+    - The URL is the only credential. To revoke it, change `MCP_SECRET`.
+11. **Strava webhook (optional).** This catches sessions recorded in the Strava app rather than on the watch.
     - Create an API app at strava.com/settings/api.
     - Register the webhook:
       ```bash

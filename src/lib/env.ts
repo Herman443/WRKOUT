@@ -38,4 +38,9 @@ export const env = {
   get stravaWebhookVerifyToken() {
     return process.env.STRAVA_WEBHOOK_VERIFY_TOKEN ?? null;
   },
+  /** Secret path segment of the Claude app connector at /api/mcp/<secret>; unset turns it off */
+  get mcpSecret() {
+    const value = process.env.MCP_SECRET;
+    return value && value.length >= 32 ? value : null;
+  },
 };

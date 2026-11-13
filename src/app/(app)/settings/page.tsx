@@ -10,6 +10,7 @@ import { logout } from "@/app/login/actions";
 import { deriveMarkers } from "@/lib/athlete";
 import { requireSession } from "@/lib/auth";
 import { formatDay, todayLocal } from "@/lib/dates";
+import { env } from "@/lib/env";
 import { getKv } from "@/lib/ingest";
 import { getActivePlan, getProfile } from "@/lib/plan-store";
 import { stravaMcpStatus } from "@/lib/strava/mcp-auth";
@@ -42,6 +43,7 @@ async function Settings({ searchParams }: Pick<PageProps<"/settings">, "searchPa
   const garminConfigured = !!process.env.GARMIN_API_KEY;
   const keyExpires = process.env.GARMIN_API_KEY_EXPIRES;
   const message = typeof params.message === "string" ? params.message : null;
+  const connectorUrl = env.mcpSecret ? `${env.appUrl}/api/mcp/${env.mcpSecret}` : null;
 
   return (
     <>
@@ -96,6 +98,8 @@ async function Settings({ searchParams }: Pick<PageProps<"/settings">, "searchPa
             </div>
             <p className="mt-1 text-sm text-muted">
               Lets the coach look up your Strava history through Strava&apos;s official MCP server. Needs a Strava subscription.
+              Strava currently only accepts its approved assistants, so this is likely to fail; use the Claude app connector
+              below instead.
             </p>
             {params.strava === "connected" && <p className="mt-1 text-sm text-good">Strava connected.</p>}
             {params.strava === "error" && <p className="mt-1 text-sm text-z5">Strava connection failed: {message}</p>}
@@ -111,6 +115,25 @@ async function Settings({ searchParams }: Pick<PageProps<"/settings">, "searchPa
                 </a>
               )}
             </div>
+          </Panel>
+          <Panel>
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="font-medium">Claude app connector</h3>
+              <span className={`text-sm ${connectorUrl ? "text-good" : "text-muted"}`}>{connectorUrl ? "On" : "Off"}</span>
+            </div>
+            <p className="mt-1 text-sm text-muted">
+              Talk to Claude about your training with both WRKOUT and Strava. In Claude, add a custom connector with this
+              URL, and add Strava&apos;s connector too. Claude can read your plan and analyses, import your Strava sessions,
+              and propose changes, which you approve here.
+            </p>
+            {connectorUrl ? (
+              <>
+                <p className="mt-3 break-all rounded-xl bg-fog px-3 py-2 font-mono text-xs select-all">{connectorUrl}</p>
+                <p className="mt-1 text-sm text-warn">Anyone with this URL can read your training data. To revoke it, change MCP_SECRET.</p>
+              </>
+            ) : (
+              <p className="mt-1 text-sm text-muted">Set MCP_SECRET in Vercel to turn it on.</p>
+            )}
           </Panel>
         </div>
       </Section>

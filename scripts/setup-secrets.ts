@@ -15,3 +15,4 @@ console.log(`TOKEN_ENCRYPTION_KEY=${randomBytes(32).toString("base64")}`);
 console.log(`NEXT_PUBLIC_VAPID_PUBLIC_KEY=${vapid.publicKey}`);
 console.log(`VAPID_PRIVATE_KEY=${vapid.privateKey}`);
 console.log(`STRAVA_WEBHOOK_VERIFY_TOKEN=${randomBytes(16).toString("base64url")}`);
+console.log(`MCP_SECRET=${randomBytes(32).toString("base64url")}`);

@@ -172,12 +172,14 @@ export async function applyChangeOps(planId: string, ops: ChangeOp[]) {
 
 /**
  * Applies a coach change set immediately when it is small and safe, otherwise stores it
- * as a pending proposal for the athlete to approve.
+ * as a pending proposal for the athlete to approve. `alwaysPropose` stores even small sets
+ * as proposals.
  */
 export async function applyOrPropose(
   planId: string,
   trigger: "activity" | "weekly_review" | "coach_note" | "missed",
   changeSet: ChangeSet,
+  opts: { alwaysPropose?: boolean } = {},
 ) {
   if (changeSet.ops.length === 0) return null;
   const today = todayLocal();
@@ -207,21 +209,22 @@ export async function applyOrPropose(
     }
   }
 
+  const apply = scope === "minor" && !opts.alwaysPropose;
   const [change] = await db
     .insert(planChanges)
     .values({
       planId,
       trigger,
       scope,
-      status: scope === "minor" ? "applied" : "pending",
+      status: apply ? "applied" : "pending",
       rationale: changeSet.rationale,
       reasons,
       ops: changeSet.ops,
-      decidedAt: scope === "minor" ? new Date() : null,
+      decidedAt: apply ? new Date() : null,
     })
     .returning();
 
-  if (scope === "minor") {
+  if (apply) {
     try {
       await applyChangeOps(planId, changeSet.ops);
     } catch (e) {

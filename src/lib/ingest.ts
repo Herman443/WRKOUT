@@ -28,7 +28,7 @@ import { sportSchema } from "./training/workout-structure";
 
 // Activities only get an automatic AI analysis when they are this recent; older ones
 // (first sync, backfill) are logged for load history without spending tokens.
-const ANALYZE_WITHIN_DAYS = 2;
+export const ANALYZE_WITHIN_DAYS = 2;
 const BACKFILL_DAYS = 42;
 
 async function getKv<T>(key: string): Promise<T | null> {
@@ -394,7 +394,9 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object"
 /**
  * Strava webhook follow-up. Activities recorded on the watch reach Strava via Garmin, so
  * first try to pair the event with a Garmin activity; only sessions recorded outside
- * Garmin are read — through Claude and Strava's MCP server, never the Strava API.
+ * Garmin are read — through Claude and Strava's MCP server, never the Strava API. (Strava
+ * currently refuses WRKOUT's MCP client, so the Claude app connector's import tool is the
+ * working route.)
  */
 export async function ingestStravaActivity(stravaId: string, eventTimeSec: number) {
   const [known] = await db.select({ id: activities.id }).from(activities).where(eq(activities.stravaId, stravaId));
@@ -432,30 +434,90 @@ export async function ingestStravaActivity(stravaId: string, eventTimeSec: numbe
   });
   if (!res.usedStrava || !res.data.found || !res.data.startTimeIso) return;
   const f = res.data;
-  const start = new Date(f.startTimeIso!);
+  await importStravaActivity({
+    stravaId,
+    sport: f.sport,
+    name: f.name,
+    startTime: new Date(f.startTimeIso!),
+    durationSec: f.durationSec,
+    distanceM: f.distanceM,
+    elevationGainM: f.elevationGainM,
+    avgHr: f.avgHr,
+    maxHr: f.maxHr,
+    avgPowerW: f.avgPowerW,
+  });
+}
+
+export interface StravaActivityFacts {
+  stravaId: string;
+  sport: z.infer<typeof sportSchema>;
+  name: string;
+  startTime: Date;
+  durationSec: number;
+  movingSec?: number | null;
+  distanceM: number | null;
+  elevationGainM: number | null;
+  avgHr: number | null;
+  maxHr: number | null;
+  avgPowerW: number | null;
+  calories?: number | null;
+}
+
+export type StravaImportResult = { status: "already_imported" | "matched_garmin" | "imported"; activityId: string };
+
+/**
+ * Stores a Strava activity whose facts were read through Strava's MCP server (by WRKOUT's
+ * own Claude calls, or by the athlete's Claude app via the WRKOUT connector). Idempotent by
+ * Strava id; a session the watch already delivered through Garmin only gets the Strava id.
+ * Only recent sessions get an automatic analysis.
+ */
+export async function importStravaActivity(f: StravaActivityFacts): Promise<StravaImportResult> {
+  const [known] = await db.select({ id: activities.id }).from(activities).where(eq(activities.stravaId, f.stravaId));
+  if (known) return { status: "already_imported", activityId: known.id };
+
+  const window = 2 * 60 * 1000;
+  const [garminTwin] = await db
+    .select({ id: activities.id })
+    .from(activities)
+    .where(
+      and(
+        isNull(activities.stravaId),
+        eq(activities.source, "garmin"),
+        between(activities.startTime, new Date(f.startTime.getTime() - window), new Date(f.startTime.getTime() + window)),
+      ),
+    );
+  if (garminTwin) {
+    await db.update(activities).set({ stravaId: f.stravaId }).where(eq(activities.id, garminTwin.id));
+    return { status: "matched_garmin", activityId: garminTwin.id };
+  }
+
+  const round = (n: number | null | undefined) => (n ? Math.round(n) : null);
+  const values = {
+    stravaId: f.stravaId,
+    source: "strava" as const,
+    startTime: f.startTime,
+    localDate: toLocalDate(f.startTime),
+    sport: f.sport,
+    subSport: null,
+    name: f.name,
+    durationSec: Math.round(f.durationSec),
+    movingSec: round(f.movingSec),
+    distanceM: f.distanceM,
+    elevationGainM: f.elevationGainM,
+    avgHr: round(f.avgHr),
+    maxHr: round(f.maxHr),
+    avgPowerW: round(f.avgPowerW),
+    calories: round(f.calories),
+  };
+  const load = loadFor({ ...values, laps: [], extra: {}, normalizedPowerW: null, rpe: null }, await getProfile());
+  const recent = values.localDate >= addDays(todayLocal(), -ANALYZE_WITHIN_DAYS);
   const [row] = await db
     .insert(activities)
-    .values({
-      stravaId,
-      source: "strava",
-      startTime: start,
-      localDate: toLocalDate(start),
-      sport: f.sport,
-      name: f.name,
-      durationSec: Math.round(f.durationSec),
-      distanceM: f.distanceM,
-      elevationGainM: f.elevationGainM,
-      avgHr: f.avgHr ? Math.round(f.avgHr) : null,
-      maxHr: f.maxHr ? Math.round(f.maxHr) : null,
-      avgPowerW: f.avgPowerW ? Math.round(f.avgPowerW) : null,
-      analysisStatus: "pending",
-    })
+    .values({ ...values, load: load.value, loadMethod: load.method, analysisStatus: recent ? "pending" : "skipped" })
     .returning();
-  const markers = deriveMarkers(await getProfile());
-  const load = activityLoad({ sport: row.sport, durationSec: row.durationSec, distanceM: row.distanceM, avgHr: row.avgHr, avgPower: row.avgPowerW }, markers.load);
-  await db.update(activities).set({ load: load.value, loadMethod: load.method }).where(eq(activities.id, row.id));
-  await linkToPlan({ ...row, load: load.value });
-  await enqueue("analyze_activity", { activityId: row.id });
+  await linkToPlan(row);
+  if (recent) await enqueue("analyze_activity", { activityId: row.id });
+  return { status: "imported", activityId: row.id };
 }
 
 const stravaFactsSchema = z.object({
