@@ -13,6 +13,7 @@ import { db } from "@/db";
 import { activities, analyses, planChanges, plannedWorkouts } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
 import { formatDay } from "@/lib/dates";
+import { activeSec } from "@/lib/training/active-time";
 import { averageIncline, formatKmh, isTreadmill, paceTrusted } from "@/lib/training/treadmill";
 import { formatDuration, formatPace } from "@/lib/training/vdot";
 import { saveFeedback } from "../../actions";
@@ -34,8 +35,9 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
   const [analysis] = await db.select().from(analyses).where(eq(analyses.activityId, id)).orderBy(desc(analyses.createdAt)).limit(1);
   const [planned] = a.plannedWorkoutId ? await db.select().from(plannedWorkouts).where(eq(plannedWorkouts.id, a.plannedWorkoutId)) : [];
   const [change] = analysis?.changeId ? await db.select().from(planChanges).where(eq(planChanges.id, analysis.changeId)) : [];
-  const pace = a.sport === "run" && a.distanceM ? (a.movingSec ?? a.durationSec) / (a.distanceM / 1000) : null;
-  const speed = a.sport === "bike" && a.distanceM ? a.distanceM / 1000 / ((a.movingSec ?? a.durationSec) / 3600) : null;
+  const runSec = activeSec(a);
+  const pace = a.sport === "run" && a.distanceM ? runSec / (a.distanceM / 1000) : null;
+  const speed = a.sport === "bike" && a.distanceM ? a.distanceM / 1000 / (runSec / 3600) : null;
   const working = a.analysisStatus === "pending" || a.analysisStatus === "running";
   const treadmill = a.sport === "run" && isTreadmill(a.subSport);
   const guessed = treadmill && !paceTrusted(a);
@@ -74,7 +76,7 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
 
       <div className="mt-6 grid grid-cols-3 gap-y-5">
         {a.distanceM && <Stat value={(a.distanceM / 1000).toFixed(2)} unit="km" label={guessed ? "Watch's guess" : "Distance"} />}
-        <Stat value={formatDuration(a.movingSec ?? a.durationSec)} label="Time" />
+        <Stat value={formatDuration(runSec)} label="Time" />
         {pace && <Stat value={formatPace(pace)} unit="/km" label="Pace" />}
         {treadmill && pace && <Stat value={formatKmh(3600 / pace)} unit="km/h" label="Belt speed" />}
         {incline != null && <Stat value={incline} unit="%" label="Incline" />}
@@ -95,7 +97,13 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
       {treadmill && guessed && <TreadmillCorrection activity={a} />}
 
       <Section title="Coach's analysis">
-        {analysis ? (
+        {working ? (
+          // Checked first, so a re-analysis hides the old take instead of showing it until the new one lands.
+          <p className="text-muted">
+            Your coach is looking at this workout…
+            <AutoRefresh seconds={5} />
+          </p>
+        ) : analysis ? (
           <Panel>
             <div className="flex items-baseline justify-between gap-3">
               <h3 className="font-medium">{analysis.title}</h3>
@@ -137,11 +145,6 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
               </p>
             )}
           </Panel>
-        ) : working ? (
-          <p className="text-muted">
-            Your coach is looking at this session.
-            <AutoRefresh seconds={10} />
-          </p>
         ) : (
           <p className="text-muted">
             {a.analysisStatus === "failed" ? "The analysis failed. Save feedback below to try again." : "Older sessions are logged without an analysis."}

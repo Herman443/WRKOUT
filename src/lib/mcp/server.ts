@@ -8,6 +8,7 @@ import { buildContext, fitnessToday } from "../ai/context";
 import { addDays, todayLocal } from "../dates";
 import { ANALYZE_WITHIN_DAYS, importStravaActivity } from "../ingest";
 import { applyOrPropose, getActivePlan, workoutsBetween } from "../plan-store";
+import { activeSec } from "../training/active-time";
 import { changeSetSchema } from "../training/changes";
 import { sportSchema } from "../training/workout-structure";
 
@@ -43,6 +44,8 @@ const activityView = (a: typeof activities.$inferSelect) => ({
   subSport: a.subSport,
   name: a.name,
   durationSec: a.durationSec,
+  /** Running time (lap timer time); pace = this / distance */
+  activeSec: activeSec(a),
   distanceM: a.distanceM,
   elevationGainM: a.elevationGainM,
   avgHr: a.avgHr,

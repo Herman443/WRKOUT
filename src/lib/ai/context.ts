@@ -7,6 +7,7 @@ import { addDays, diffDays, formatDay, startOfWeek, todayLocal, weekday, WEEKDAY
 import { getActivePlan, getProfile, getWeeks, workoutsBetween } from "../plan-store";
 import { getKv } from "../ingest";
 import { acwr, fitnessSeries } from "../training/load";
+import { activeSec } from "../training/active-time";
 import { isTreadmill, paceTrusted, type RunSurface } from "../training/treadmill";
 import { formatDuration, formatPace } from "../training/vdot";
 import type { Zone } from "../training/zones";
@@ -129,7 +130,8 @@ export async function buildContext(opts: { upcomingDays?: number; excludeStrava?
     for (const a of recent) {
       const belt = isTreadmill(a.subSport) ? (paceTrusted(a) ? " (treadmill)" : " (treadmill, distance is the watch's guess)") : "";
       out.push(
-        `- ${a.localDate} ${a.sport}${belt} "${a.name}": ${formatDuration(a.durationSec)}${a.distanceM ? `, ${km(a.distanceM)}` : ""}` +
+        `- ${a.localDate} ${a.sport}${belt} "${a.name}": ${formatDuration(activeSec(a))}${a.distanceM ? `, ${km(a.distanceM)}` : ""}` +
+          (a.sport === "run" && a.distanceM && paceTrusted(a) ? `, ${formatPace(activeSec(a) / (a.distanceM / 1000))}/km` : "") +
           (a.avgHr ? `, avg HR ${a.avgHr}` : "") +
           (a.normalizedPowerW ? `, NP ${a.normalizedPowerW} W` : "") +
           (a.load ? `, load ${Math.round(a.load)}` : "") +

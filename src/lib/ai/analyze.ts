@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { activities, analyses, plannedWorkouts } from "@/db/schema";
+import { activeSec } from "../training/active-time";
 import { averageIncline, isTreadmill, treadmillCorrection } from "../training/treadmill";
 import { formatDuration, formatPace } from "../training/vdot";
 import { changeSetSchema } from "../training/changes";
@@ -21,13 +22,15 @@ const analysisSchema = z.object({
 });
 
 function describeActivity(a: typeof activities.$inferSelect) {
-  const pace = a.sport === "run" && a.distanceM ? `, avg moving pace ${formatPace((a.movingSec ?? a.durationSec) / (a.distanceM / 1000))}/km` : "";
+  const runSec = activeSec(a);
+  const pace = a.sport === "run" && a.distanceM ? `, avg pace ${formatPace(runSec / (a.distanceM / 1000))}/km` : "";
   const lines = [
     `${a.localDate} ${a.sport}${a.subSport ? ` (${a.subSport})` : ""}: "${a.name}"`,
-    `Duration ${formatDuration(a.durationSec)}${a.movingSec ? ` (moving ${formatDuration(a.movingSec)})` : ""}` +
+    `Duration ${formatDuration(runSec)}${a.durationSec - runSec >= 60 ? ` (${formatDuration(a.durationSec)} elapsed incl. pauses)` : ""}` +
       (a.distanceM ? `, ${(a.distanceM / 1000).toFixed(2)} km` : "") +
       pace +
-      (a.elevationGainM ? `, +${Math.round(a.elevationGainM)} m` : ""),
+      (a.elevationGainM ? `, +${Math.round(a.elevationGainM)} m` : "") +
+      (pace ? ". This pace is distance over lap timer time; Strava's and Garmin's own average pace use moving time and can be faster, so quote this one" : ""),
     [
       a.avgHr && `avg HR ${a.avgHr}`,
       a.maxHr && `max HR ${a.maxHr}`,

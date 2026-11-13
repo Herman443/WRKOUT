@@ -13,6 +13,7 @@ import {
   type TreadmillSession,
 } from "@/db/schema";
 import { deriveMarkers } from "./athlete";
+import { activeSec } from "./training/active-time";
 import { addDays, toLocalDate, todayLocal } from "./dates";
 import { garmin, type GarminActivitySummary } from "./garmin/client";
 import { parseFit } from "./garmin/fit";
@@ -138,7 +139,7 @@ function loadFor(a: LoadFields, profile: AthleteProfile | null | undefined) {
   return activityLoad(
     {
       sport: a.sport,
-      durationSec: a.movingSec ?? a.durationSec,
+      durationSec: activeSec(a),
       distanceM,
       avgHr: a.avgHr,
       normalizedPower: a.normalizedPowerW,
@@ -150,7 +151,7 @@ function loadFor(a: LoadFields, profile: AthleteProfile | null | undefined) {
 }
 
 const complianceInput = (a: Activity) => ({
-  durationSec: a.movingSec ?? a.durationSec,
+  durationSec: activeSec(a),
   distanceM: a.distanceM,
   laps: a.laps,
   hrZoneSeconds: a.hrZoneSeconds,
@@ -162,7 +163,7 @@ async function linkToPlan(a: Activity) {
   const active = await getActivePlan();
   if (!active) return;
   const candidates = await workoutsBetween(active.plan.id, addDays(a.localDate, -1), addDays(a.localDate, 1));
-  const match = matchActivity({ sport: a.sport, date: a.localDate, durationSec: a.movingSec ?? a.durationSec }, candidates.map(toLite));
+  const match = matchActivity({ sport: a.sport, date: a.localDate, durationSec: activeSec(a) }, candidates.map(toLite));
   if (!match) return;
   const compliance = computeCompliance(match, complianceInput(a));
   await db.update(activities).set({ plannedWorkoutId: match.id, compliance }).where(eq(activities.id, a.id));
