@@ -10,25 +10,29 @@ import { WorkoutHero } from "@/components/workout-hero";
 import { db } from "@/db";
 import { activities, analyses, dailyHealth, planChanges } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
-import { addDays, formatDay, localTime, startOfWeek, todayLocal } from "@/lib/dates";
+import { addDays, dateRange, formatDay, localTime, startOfWeek, todayLocal } from "@/lib/dates";
 import { getKv } from "@/lib/ingest";
 import { getActivePlan, workoutsBetween } from "@/lib/plan-store";
 import { paceTrusted, type RunSurface } from "@/lib/training/treadmill";
 import { formatDuration } from "@/lib/training/vdot";
 import { retryPlan } from "./actions";
 
-export default function TodayPage() {
+export default function TodayPage({ searchParams }: PageProps<"/">) {
   return (
     <Suspense fallback={<Skeleton lines={4} />}>
-      <Today />
+      <Today searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Today() {
+async function Today({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   await requireSession();
   const today = todayLocal();
   const weekStart = startOfWeek(today);
+  const weekEnd = addDays(weekStart, 6);
+  const { day } = await searchParams;
+  const viewingDay = typeof day === "string" && dateRange(weekStart, weekEnd).includes(day);
+  const selectedDate = viewingDay ? day : today;
   const [active, runs] = await Promise.all([
     getActivePlan(),
     db.select({
@@ -45,41 +49,69 @@ async function Today() {
       .where(and(eq(activities.sport, "run"), between(activities.localDate, weekStart, today)))
       .orderBy(desc(activities.startTime)),
   ]);
-  const dateLine = formatDay(today, { weekday: "long", day: "numeric", month: "long" });
-  const completedToday = runs.filter((run) => run.localDate === today);
-  const hasCompletedRun = completedToday.length > 0;
-  const completedRunHero = hasCompletedRun ? (
-    <section className="mt-1">
-      <h1 className="text-lg font-semibold">Completed today</h1>
-      <div className="mt-2 space-y-2">
-        {completedToday.map((run) => {
-          const { hour, minute } = localTime(run.startTime);
-          return (
-            <Panel key={run.id}>
-              <Link href={`/activities/${run.id}`} className="block">
-                <h2 className="text-xl font-semibold">{run.name}</h2>
-                <p className="text-sm text-muted">
-                  {hour}:{String(minute).padStart(2, "0")} · {formatDuration(run.durationSec)}
-                  {run.distanceM ? ` · ${(run.distanceM / 1000).toFixed(1)} km` : ""}
-                </p>
+  const dateLine = formatDay(selectedDate, { weekday: "long", day: "numeric", month: "long" });
+  const dayRuns = runs.filter((run) => run.localDate === selectedDate);
+  const hasCompletedRun = dayRuns.length > 0;
+  const daySessions = (workouts: Parameters<typeof WeekStrip>[0]["workouts"], surface?: RunSurface) => {
+    const dayWorkouts = workouts.filter((workout) =>
+      workout.date === selectedDate && workout.status !== "skipped" &&
+      !dayRuns.some((run) => run.id === workout.activityId)
+    );
+    const title = dayWorkouts.length ? "Sessions" : hasCompletedRun
+      ? selectedDate === today ? "Completed today" : "Completed sessions"
+      : "Rest day";
+    return (
+      <section className="mt-1">
+        <h1 className="text-lg font-semibold">{title}</h1>
+        <div className="mt-2 space-y-2">
+          {dayRuns.map((run) => {
+            const { hour, minute } = localTime(run.startTime);
+            return (
+              <Link key={run.id} href={`/activities/${run.id}`} className="block rounded-2xl">
+                <Panel>
+                  <h2 className="text-xl font-semibold">{run.name}</h2>
+                  <p className="text-sm text-muted">
+                    {hour}:{String(minute).padStart(2, "0")} · {formatDuration(run.durationSec)}
+                    {run.distanceM ? ` · ${(run.distanceM / 1000).toFixed(1)} km` : ""}
+                  </p>
+                  <PaceProfile laps={run.laps} estimated={!paceTrusted(run)} />
+                </Panel>
               </Link>
-              <PaceProfile laps={run.laps} estimated={!paceTrusted(run)} />
-            </Panel>
-          );
-        })}
-      </div>
-    </section>
-  ) : null;
+            );
+          })}
+          {dayWorkouts.map((workout) => (
+            <Link
+              key={workout.id}
+              href={workout.activityId ? `/activities/${workout.activityId}` : `/workout/${workout.id}`}
+              className="block rounded-2xl"
+            >
+              <Panel>
+                <h2 className="text-xl font-semibold">{workout.title}</h2>
+                <WorkoutHero workout={workout} compact surface={surface} />
+              </Panel>
+            </Link>
+          ))}
+        </div>
+      </section>
+    );
+  };
+  const completedRunHero = hasCompletedRun ? daySessions([]) : null;
+  const selectedDayWithoutPlan = viewingDay && (
+    <>
+      <p className="text-sm text-muted">{dateLine}</p>
+      {daySessions([])}
+    </>
+  );
   const weekOverview = (workouts: Parameters<typeof WeekStrip>[0]["workouts"]) => (
     <Section title="This week" action={active && <TextLink href="/plan">Full plan</TextLink>}>
-      <WeekStrip weekStart={weekStart} today={today} workouts={workouts} runs={runs} />
+      <WeekStrip weekStart={weekStart} today={today} selectedDate={selectedDate} workouts={workouts} runs={runs} />
     </Section>
   );
 
   if (!active) {
     return (
       <>
-        {completedRunHero ?? <PageTitle sub={dateLine}>Set a goal to get your plan</PageTitle>}
+        {selectedDayWithoutPlan || completedRunHero || <PageTitle sub={dateLine}>Set a goal to get your plan</PageTitle>}
         <p className="mt-3 max-w-prose text-muted">
           Pick a race or event, tell the coach about your week and your current speed, and it builds the training up to race day.
         </p>
@@ -95,7 +127,7 @@ async function Today() {
   if (plan.status === "generating" || plan.status === "failed") {
     return (
       <>
-        {completedRunHero ?? (
+        {selectedDayWithoutPlan || completedRunHero || (
           <PageTitle sub={dateLine}>{plan.status === "failed" ? "The plan could not be built" : "Building your plan"}</PageTitle>
         )}
         {plan.status === "generating" ? (
@@ -124,7 +156,7 @@ async function Today() {
   }
 
   const [week, [health], pending, [latest], surface] = await Promise.all([
-    workoutsBetween(plan.id, weekStart, addDays(weekStart, 6)),
+    workoutsBetween(plan.id, weekStart, weekEnd),
     db.select().from(dailyHealth).where(eq(dailyHealth.date, today)),
     db.select({ id: planChanges.id }).from(planChanges).where(eq(planChanges.status, "pending")),
     db.select().from(analyses).orderBy(desc(analyses.createdAt)).limit(1),
@@ -132,7 +164,7 @@ async function Today() {
   ]);
   const todays = week.filter((w) => w.date === today && w.status !== "skipped");
   const main = hasCompletedRun ? undefined : todays.find((w) => w.status === "planned" && w.sport === "run");
-  const next = !hasCompletedRun && !main
+  const next = !viewingDay && !hasCompletedRun && !main
     ? (await workoutsBetween(plan.id, addDays(today, 1), goal.eventDate)).find((w) => w.status === "planned" && w.sport === "run")
     : null;
   const otherWorkouts = todays.filter((w) => w.id !== main?.id && (!hasCompletedRun || w.status !== "completed" || w.sport !== "run"));
@@ -148,7 +180,7 @@ async function Today() {
         {health && <Readiness hrv={health.hrvMs} hrvStatus={health.hrvStatus} sleepSec={health.sleepSec} />}
       </div>
 
-      {completedRunHero ?? (main ? (
+      {viewingDay ? daySessions(week, surface) : completedRunHero ?? (main ? (
         <article className="mt-1">
           <Link href={`/workout/${main.id}`}>
             <h1 className="text-[30px] leading-tight font-semibold tracking-tight">{main.title}</h1>
@@ -172,7 +204,7 @@ async function Today() {
       ) : (
         <h1 className="mt-1 text-[30px] leading-tight font-semibold tracking-tight">{todays.length ? "Today’s sessions" : "Rest day"}</h1>
       ))}
-      {otherWorkouts.length > 0 && (
+      {!viewingDay && otherWorkouts.length > 0 && (
         <ul className="mt-4 space-y-2 text-sm">
           {otherWorkouts.map((workout) => (
             <li key={workout.id}>
