@@ -23,15 +23,18 @@ export function decrypt(payload: string): string {
   return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
 }
 
-/** Format: scrypt$<salt b64>$<hash b64> */
+/**
+ * Format: scrypt.<salt base64url>.<hash base64url>. No "$": Next.js expands "$NAME" in
+ * .env files, which silently corrupts such values. Older "scrypt$…$…" hashes still verify.
+ */
 export function hashPassword(password: string): string {
   const salt = randomBytes(16);
   const hash = scryptSync(password, salt, 32);
-  return `scrypt$${salt.toString("base64")}$${hash.toString("base64")}`;
+  return `scrypt.${salt.toString("base64url")}.${hash.toString("base64url")}`;
 }
 
 export function verifyPassword(password: string, stored: string): boolean {
-  const [scheme, salt, hash] = stored.split("$");
+  const [scheme, salt, hash] = stored.trim().split(stored.includes("$") ? "$" : ".");
   if (scheme !== "scrypt" || !salt || !hash) return false;
   const expected = Buffer.from(hash, "base64");
   const actual = scryptSync(password, Buffer.from(salt, "base64"), expected.length);
