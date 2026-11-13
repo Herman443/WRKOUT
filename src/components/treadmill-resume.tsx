@@ -15,7 +15,7 @@ export function TreadmillResume() {
   return (
     <Link
       href={liveSessionHref(live)}
-      className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-20 mx-auto block max-w-lg px-[max(1.25rem,env(safe-area-inset-left))]"
+      className="fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-20 mx-auto block max-w-lg px-[max(1.25rem,env(safe-area-inset-left))]"
     >
       <span className="flex items-center justify-between gap-3 rounded-2xl bg-ink px-4 py-3 text-fog">
         <span className="min-w-0 truncate">

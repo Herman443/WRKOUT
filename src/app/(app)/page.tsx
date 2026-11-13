@@ -181,7 +181,7 @@ async function Today({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
       </div>
 
       {viewingDay ? daySessions(week, surface) : completedRunHero ?? (main ? (
-        <article className="mt-1">
+        <article className="session-feature mt-4">
           <Link href={`/workout/${main.id}`}>
             <h1 className="text-[30px] leading-tight font-semibold tracking-tight">{main.title}</h1>
           </Link>
@@ -194,7 +194,7 @@ async function Today({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
           </div>
         </article>
       ) : next ? (
-        <article className="mt-1">
+        <article className="session-feature mt-4">
           <p className="text-sm text-muted">Next run, {formatDay(next.date)}</p>
           <Link href={`/workout/${next.id}`}>
             <h1 className="text-[30px] leading-tight font-semibold tracking-tight">{next.title}</h1>

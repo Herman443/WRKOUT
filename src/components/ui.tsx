@@ -30,7 +30,7 @@ export function Section({ title, action, children }: { title?: string; action?: 
 }
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-2xl bg-paper p-4 ${className}`}>{children}</div>;
+  return <div className={`app-panel rounded-2xl bg-paper p-4 ${className}`}>{children}</div>;
 }
 
 export function Button({
@@ -46,7 +46,7 @@ export function Button({
   }[variant];
   return (
     <button
-      className={`rounded-xl px-4 py-2.5 text-sm font-medium disabled:opacity-50 ${styles} ${className}`}
+      className={`action-button rounded-xl px-4 py-2.5 text-sm font-medium disabled:opacity-50 ${styles} ${className}`}
       {...props}
     >
       {children}
@@ -66,7 +66,7 @@ export function PageTitle({ children, sub }: { children: ReactNode; sub?: ReactN
   return (
     <header>
       {sub && <p className="text-sm text-muted">{sub}</p>}
-      <h1 className="mt-0.5 text-[28px] leading-tight font-semibold tracking-tight">{children}</h1>
+      <h1 className="condensed mt-1 text-[34px] leading-tight font-bold tracking-tight text-balance">{children}</h1>
     </header>
   );
 }

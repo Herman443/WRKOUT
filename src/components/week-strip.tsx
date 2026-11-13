@@ -14,7 +14,7 @@ export function WeekStrip({ weekStart, today, selectedDate, workouts, runs }: {
   runs: Pick<Activity, "id" | "localDate" | "name" | "durationSec" | "distanceM" | "startTime">[];
 }) {
   return (
-    <ol className="grid grid-cols-7 gap-1.5">
+    <ol className="week-strip grid grid-cols-7 gap-1">
       {WEEKDAYS.map((d, i) => {
         const date = addDays(weekStart, i);
         const day = workouts.filter((w) => w.date === date && w.status !== "skipped");
@@ -30,11 +30,11 @@ export function WeekStrip({ weekStart, today, selectedDate, workouts, runs }: {
               scroll={false}
               aria-label={formatDay(date, { weekday: "long", day: "numeric", month: "long" })}
               aria-current={date === selectedDate ? "true" : undefined}
-              className={`flex h-[5.25rem] flex-col rounded-xl bg-paper px-1.5 pt-1.5 pb-1 ${date === selectedDate ? "ring-1 ring-ink" : ""}`}
+              className="week-day flex h-28 flex-col rounded-xl px-1 pt-2 pb-2"
             >
-              <div className="flex items-baseline justify-between text-[11px] text-muted">
+              <div className="flex flex-col items-center gap-1 text-[11px] text-muted">
                 <span>{d.slice(0, 2)}</span>
-                <span className="num text-xs text-ink">{Number(date.slice(8))}</span>
+                <span className="num text-xl text-ink">{Number(date.slice(8))}</span>
               </div>
               <div className="mt-auto">
                 {run ? (

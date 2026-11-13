@@ -19,8 +19,8 @@ function isActive(pathname: string | null, href: string) {
 /** Tab bar markup; `pathname` is null in the prerendered shell. */
 export function NavBar({ pathname }: { pathname: string | null }) {
   return (
-    <nav className="tab-bar fixed inset-x-0 bottom-0 z-20 border-t border-line bg-fog/95 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur">
-      <ul className="mx-auto grid max-w-lg grid-cols-4">
+    <nav aria-label="Main navigation" className="tab-bar fixed inset-x-0 bottom-0 z-20 border-t border-line bg-fog/95 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur">
+      <ul className="mx-auto grid max-w-lg grid-cols-4 gap-1 px-3 py-2">
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (
@@ -28,7 +28,7 @@ export function NavBar({ pathname }: { pathname: string | null }) {
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={`flex flex-col items-center gap-1 py-2.5 text-xs ${active ? "text-ink" : "text-muted"}`}
+                className={`nav-tab flex flex-col items-center gap-1 rounded-xl py-2 text-xs ${active ? "bg-ink font-semibold text-fog" : "text-muted"}`}
               >
                 <Icon size={22} strokeWidth={active ? 2.2 : 1.6} aria-hidden />
                 {label}

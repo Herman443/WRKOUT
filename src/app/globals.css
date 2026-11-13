@@ -17,6 +17,8 @@
   --z5: #be2f4b;
   --good: #3f7f63;
   --warn: #b7791f;
+  --session: #deebe2;
+  --selected: #c7decf;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -30,6 +32,8 @@
     --z2: #5f927c;
     --good: #6fb592;
     --warn: #e0a84a;
+    --session: #203a2e;
+    --selected: #304d3e;
   }
 }
 
@@ -92,6 +96,78 @@ input[type="date"]::-webkit-date-and-time-value {
 
 .condensed {
   font-variation-settings: "wdth" 80;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--fog);
+}
+
+html { scrollbar-color: var(--muted) var(--fog); }
+input, textarea { caret-color: var(--good); }
+
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-variation-settings: "wdth" 75;
+  font-size: 1.5rem;
+  font-weight: 850;
+  letter-spacing: -0.035em;
+}
+
+.brand-lockup svg { color: var(--good); }
+
+.session-feature {
+  background: var(--session);
+  border-radius: 16px;
+  padding: 1.5rem;
+}
+
+.session-feature h1 {
+  font-variation-settings: "wdth" 80;
+  font-size: clamp(2rem, 7vw, 2.625rem);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.workout-profile {
+  border-bottom: 1px solid var(--muted);
+  padding-bottom: 5px;
+}
+
+.workout-stats {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1.25rem;
+}
+
+.workout-stats .num { font-size: 2.5rem; }
+
+.week-strip {
+  padding: 0.375rem;
+  border-radius: 16px;
+  background: var(--paper);
+}
+
+.week-day[aria-current="true"] { background: var(--selected); }
+.week-day, .nav-tab, .action-button, .surface-option {
+  transition: background-color 160ms ease-out, transform 160ms ease-out;
+}
+.nav-tab:active, .action-button:active, .surface-option:active { transform: scale(0.97); }
+
+@media (hover: hover) {
+  .week-day:hover { background: var(--session); }
+  .nav-tab:not([aria-current]):hover { background: var(--line); color: var(--ink); }
+  a:hover > .app-panel { background: var(--session); }
+  .action-button:not(:disabled):hover { filter: brightness(0.92); }
+}
+
+@media (max-width: 360px) {
+  .session-feature { padding: 1rem; }
+  .workout-stats { column-gap: 1rem; }
+  .workout-stats .num { font-size: 2rem; }
 }
 
 :focus-visible {

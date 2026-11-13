@@ -20,8 +20,8 @@ function keyTarget(w: PlannedWorkout, treadmill: boolean) {
   const hardest = work.sort((a, b) => (a.target.low ?? 9999) - (b.target.low ?? 9999))[0];
   if (!hardest) return null;
   const t = hardest.target;
-  if (t.type === "pace" && t.low && treadmill) return { value: formatKmh(kmhFromPace(t.low)), unit: "km/h", label: t.zone ?? "Speed" };
-  if (t.type === "pace" && t.low) return { value: formatPace(t.low), unit: "/km", label: t.zone ?? "Pace" };
+  if (t.type === "pace" && t.low && treadmill) return { value: formatKmh(kmhFromPace(t.low)), unit: "km/h", label: "Work speed" };
+  if (t.type === "pace" && t.low) return { value: formatPace(t.low), unit: "/km", label: "Work pace" };
   if (t.type === "power" && t.low) return { value: `${Math.round(t.low)}`, unit: "W", label: t.zone ?? "Power" };
   if (t.type === "hr" && t.high) return { value: `≤${Math.round(t.high)}`, unit: "bpm", label: t.zone ?? "Heart rate" };
   return null;
@@ -34,7 +34,7 @@ function SurfaceToggle({ surface }: { surface: RunSurface }) {
       name="surface"
       value={value}
       aria-pressed={surface === value}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${surface === value ? "bg-paper text-ink shadow-sm" : "text-muted"}`}
+      className={`surface-option rounded-lg px-3 py-2.5 text-sm font-medium ${surface === value ? "bg-paper text-ink shadow-sm" : "text-muted"}`}
     >
       {label}
     </button>
@@ -67,10 +67,10 @@ export function WorkoutHero({
         structure={workout.structure}
         type={workout.type}
         plannedDurationSec={workout.plannedDurationSec}
-        height={compact ? 56 : 88}
-        className="mt-5"
+        height={compact ? 56 : 104}
+        className={compact ? "mt-5" : "workout-profile mt-5"}
       />
-      <div className="mt-5 flex gap-8">
+      <div className={`mt-5 flex flex-wrap gap-x-6 gap-y-4 ${compact ? "" : "workout-stats"}`}>
         {d && <Stat value={d.value} unit={d.unit} label="Duration" />}
         {workout.plannedDistanceM && <Stat value={(workout.plannedDistanceM / 1000).toFixed(1)} unit="km" label="Distance" />}
         {t && <Stat value={t.value} unit={t.unit} label={t.label} />}

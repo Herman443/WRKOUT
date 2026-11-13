@@ -122,7 +122,7 @@ async function Plan() {
   return (
     <>
       <PageTitle sub={dateLine}>{goal.name}</PageTitle>
-      <div className="mt-6 flex gap-8">
+      <div className="mt-6 flex flex-wrap gap-x-8 gap-y-4">
         <Stat value={weeksToGo} label={weeksToGo === 1 ? "week to go" : "weeks to go"} />
         {goal.targetTimeSec && <Stat value={formatDuration(goal.targetTimeSec)} label="Target" />}
         {plan.predictedFinishSec && <Stat value={formatDuration(plan.predictedFinishSec)} label="Predicted" />}
@@ -143,10 +143,11 @@ async function Plan() {
             />
           </div>
         )}
-        <div className="mt-1 flex gap-0.5 text-xs text-muted">
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
           {segments.map((s, i) => (
-            <div key={i} className="min-w-0 truncate" style={{ flexGrow: s.count, flexBasis: 0 }}>
-              {s.count >= 2 ? PHASE_NAME[s.phase] : ""}
+            <div key={i} className="flex items-center gap-1.5">
+              <span aria-hidden className={`size-2.5 shrink-0 rounded-sm ${PHASE_TONE[s.phase] ?? "bg-ink/20"}`} />
+              {PHASE_NAME[s.phase] ?? s.phase}
             </div>
           ))}
         </div>
@@ -202,10 +203,10 @@ async function Plan() {
                           <li key={x.id}>
                             <Link
                               href={x.href}
-                              className={`relative isolate flex items-center gap-3 py-2.5 ${x.unplanned ? "before:pointer-events-none before:absolute before:inset-y-1 before:-inset-x-2 before:-z-10 before:rounded-lg before:bg-line/35" : ""}`}
+                              className={`relative isolate grid grid-cols-[2rem_minmax(0,1fr)_3rem] items-center gap-x-3 gap-y-1 py-2.5 ${x.unplanned ? "before:pointer-events-none before:absolute before:inset-y-1 before:-inset-x-2 before:-z-10 before:rounded-lg before:bg-line/35" : ""}`}
                             >
-                              <span className="w-12 shrink-0 text-sm text-muted">{formatDay(x.date, { weekday: "short" })}</span>
-                              <span className={`min-w-0 flex-1 truncate ${x.status === "skipped" || x.status === "missed" ? "text-muted line-through" : ""}`}>
+                              <span className="text-sm text-muted">{formatDay(x.date, { weekday: "short" })}</span>
+                              <span className={`min-w-0 ${x.status === "skipped" || x.status === "missed" ? "text-muted line-through" : ""}`}>
                                 {x.title}
                               </span>
                               <Silhouette
@@ -214,10 +215,10 @@ async function Plan() {
                                 plannedDurationSec={x.plannedDurationSec}
                                 height={18}
                                 gap={1}
-                                className="w-16 shrink-0"
+                                className="col-start-2 row-start-2 w-16"
                                 muted={x.muted}
                               />
-                              <span className="num w-12 shrink-0 text-right">
+                              <span className="num col-start-3 row-start-1 text-right">
                                 {x.status === "completed" ? "✓" : x.plannedDurationSec ? compactDuration(x.plannedDurationSec) : ""}
                               </span>
                             </Link>

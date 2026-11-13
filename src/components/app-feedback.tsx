@@ -40,7 +40,7 @@ export function AppFeedback() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Feedback on the app"
-        className="absolute top-[calc(0.5rem+env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] rounded-full p-2 text-muted"
+        className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-line"
       >
         <Lightbulb size={20} strokeWidth={1.6} aria-hidden />
       </button>
