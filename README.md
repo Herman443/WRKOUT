@@ -50,7 +50,7 @@ You need: a GitHub repo (this one), and free Vercel and Supabase accounts. You a
    npm run setup:secrets -- "choose-a-good-password"
    ```
    Copy the output plus the values below into `.env.local` (see `.env.example`).
-3. **Claude API key.** Get it at console.anthropic.com → API keys and set it as `ANTHROPIC_API_KEY`. Set a monthly spend limit, e.g. $15.
+3. **Claude API key.** Get it at console.anthropic.com → API keys and set it as `ANTHROPIC_API_KEY`. Set a monthly spend limit, e.g. $15. To go through a gateway instead, see *Using a Claude gateway* below.
 4. **Garmin key.** In Garmin Connect on the web, go to Settings → Personal API and create a key valid for 1 year. Set `GARMIN_API_KEY`, and set `GARMIN_API_KEY_EXPIRES` to its expiry date (you'll get a reminder 14 days before).
 5. **Create the tables:**
    ```bash
@@ -68,7 +68,7 @@ You need: a GitHub repo (this one), and free Vercel and Supabase accounts. You a
    - In Settings, choose *Turn on notifications*, then *Send a test*.
 9. **Strava (optional, experimental).** In Settings → *Connect Strava*, approve access on Strava. To confirm Claude can reach it, run:
    ```bash
-   npm run spike:claude-strava
+   npm run check:claude -- --strava
    ```
    Run it locally with the production env.
 
@@ -95,6 +95,34 @@ npm run try:plan -- 2027-04-25 21097
 - `spike:garmin` covers the token exchange, recent activities, FIT parsing, and the sleep/HRV fields.
 - `try:plan` generates a real plan into the configured database and prints the outline, the checks and the cost. It costs roughly $0.50–1.
 
+### Using a Claude gateway
+
+The Anthropic SDK reads `ANTHROPIC_BASE_URL` plus `ANTHROPIC_API_KEY` (or `ANTHROPIC_AUTH_TOKEN`), so a gateway such as Netlight's LiteLLM proxy needs no code changes:
+
+```
+ANTHROPIC_BASE_URL=https://llm.netlight.ai
+ANTHROPIC_API_KEY=sk-...
+```
+
+Run this to see what the endpoint supports:
+
+```bash
+npm run check:claude
+```
+
+It sends a few tiny requests and reports:
+- the Claude model names the endpoint offers
+- whether structured output works (required)
+- whether refusal fallbacks and top-level prompt caching work (optional)
+
+Optional features the endpoint rejects are switched off automatically at runtime. If the model name differs, set `COACH_MODEL`.
+
+Notes:
+- **Data routing.** Garmin health data and Strava history are sent to the model. A key in the gateway's `safe-eu-models` group keeps that traffic EU-hosted; `unsafe-all-models` may route it outside the EU.
+- **Strava MCP.** The MCP connector needs Anthropic's own API behind the gateway. If the gateway routes Claude through Bedrock or Vertex, the coach runs on Garmin data only.
+- **Inherited variables.** A variable already set in your shell overrides `.env.local`. Terminals started from the Claude desktop app inherit its own `ANTHROPIC_BASE_URL`, so run local commands from a regular terminal.
+- **Switching later.** To move to a private Claude API key, remove `ANTHROPIC_BASE_URL` and set your own `ANTHROPIC_API_KEY`.
+
 ## Local development
 
 ```bash
@@ -110,7 +138,7 @@ npm run seed:demo
 npm run dev
 ```
 
-1. `db:local` starts an embedded Postgres (PGlite) on port 54322. For it, set `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54322/postgres` and `DATABASE_POOL_MAX=1`.
+1. `db:local` starts an embedded Postgres (PGlite) on port 54322. For it, set `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54322/postgres` and `DATABASE_POOL_MAX=1`. All connections share one PGlite session, so a process killed mid-transaction can leave work uncommitted. If local data looks wrong, restart `db:local`.
 2. `db:migrate` creates the tables. Run it in another terminal.
 3. `seed:demo` (optional) fills the database with a demo plan, activities and a proposal.
 4. `dev` starts the app.

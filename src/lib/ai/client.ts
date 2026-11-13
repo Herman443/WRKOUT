@@ -2,10 +2,11 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { BetaContentBlock, BetaMessage, BetaMessageParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-import type { z } from "zod";
+import { z } from "zod";
 import { db } from "@/db";
 import { aiCalls } from "@/db/schema";
 import { getStravaMcpToken, STRAVA_MCP_URL } from "../strava/mcp-auth";
+import { parseJsonReply } from "./json";
 import { COACH_SYSTEM } from "./prompts";
 
 export const COACH_MODEL = process.env.COACH_MODEL ?? "claude-opus-5-5";
@@ -60,30 +61,55 @@ export async function runStructured<S extends z.ZodType>(req: StructuredRequest<
   const stravaToken = req.useStrava ? await getStravaMcpToken() : null;
   const messages: BetaMessageParam[] = [...(req.history ?? []), { role: "user", content: req.task }];
   let usedStrava = false;
+  let repaired = false;
 
   // pause_turn means a long server-side tool loop was paused; resume by sending it back.
-  for (let turn = 0; turn < 4; turn++) {
+  for (let turn = 0; turn < 5; turn++) {
     const { message, mcp } = await send(req, messages, stravaToken);
     usedStrava ||= mcp;
     await logUsage(req.purpose, message);
+    const content = message.content as BetaContentBlock[];
 
     if (message.stop_reason === "pause_turn") {
-      messages.push({ role: "assistant", content: message.content as BetaContentBlock[] });
+      messages.push({ role: "assistant", content });
       continue;
     }
     if (message.stop_reason === "refusal") {
       throw new AiError(`The model declined (${message.stop_details?.category ?? "unspecified"})`);
     }
     if (message.stop_reason === "max_tokens") throw new AiError("The response was cut off at max_tokens");
-    if (message.parsed_output == null) throw new AiError("The response did not match the expected format");
 
-    return {
-      data: message.parsed_output as z.infer<S>,
-      history: [...messages, { role: "assistant", content: message.content as BetaContentBlock[] }],
-      usedStrava,
-    };
+    const text = content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n");
+    const parsed = parseJsonReply(req.schema, text);
+    if (parsed.ok) {
+      return { data: parsed.data, history: [...messages, { role: "assistant", content }], usedStrava };
+    }
+    // Gateways that don't enforce the schema occasionally return fenced or slightly off
+    // JSON; give the model one chance to correct it.
+    if (repaired) throw new AiError(`The response did not match the expected format: ${parsed.error}`);
+    repaired = true;
+    messages.push(
+      { role: "assistant", content },
+      {
+        role: "user",
+        content:
+          `That reply could not be used: ${parsed.error}\n` +
+          `Reply again with only the JSON object, no code fences, matching this JSON schema:\n` +
+          JSON.stringify(z.toJSONSchema(req.schema)),
+      },
+    );
   }
   throw new AiError("The model kept pausing; giving up");
+}
+
+/**
+ * The schema is sent to the API (strictly enforced by Anthropic's own endpoint), but
+ * parsing is ours: `parse` hands back the raw text so the SDK never throws on output a
+ * gateway failed to constrain.
+ */
+function outputFormat(schema: z.ZodType) {
+  const { schema: jsonSchema } = betaZodOutputFormat(schema);
+  return { type: "json_schema" as const, schema: jsonSchema, parse: (content: string) => content };
 }
 
 /** One streamed request, retried without optional features if the endpoint rejects it. */
@@ -100,8 +126,11 @@ async function send<S extends z.ZodType>(req: StructuredRequest<S>, messages: Be
           ...(betas.length ? { betas } : {}),
           ...(on("fallbacks") ? { fallbacks: "default" as const } : {}),
           ...(on("autoCache") ? { cache_control: { type: "ephemeral" as const } } : {}),
-          thinking: { type: "adaptive" },
-          output_config: { effort: req.effort, format: betaZodOutputFormat(req.schema) },
+          // Summarised thinking streams while the model reasons. With the default
+          // ("omitted") the stream can sit silent for over a minute, and proxies with an
+          // idle timeout (e.g. ~60 s on LiteLLM gateways) drop the connection.
+          thinking: { type: "adaptive", display: "summarized" },
+          output_config: { effort: req.effort, format: outputFormat(req.schema) },
           system: [
             { type: "text", text: COACH_SYSTEM },
             { type: "text", text: req.context },

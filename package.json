@@ -16,9 +16,9 @@
     "hash-password": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/hash-password.ts",
     "seed:demo": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-demo.ts",
     "spike:garmin": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/garmin-spike.ts",
-    "spike:claude-strava": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/claude-strava-spike.ts",
     "try:plan": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/try-plan.ts",
-    "icons": "tsx scripts/generate-icons.tsx"
+    "icons": "tsx scripts/generate-icons.tsx",
+    "check:claude": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/check-claude.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
