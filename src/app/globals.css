@@ -53,11 +53,33 @@ html {
   background: var(--fog);
   color: var(--ink);
   -webkit-tap-highlight-color: transparent;
+  /* Stop iOS inflating text when the phone is rotated to landscape. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   font-family: var(--font-sans);
   font-variation-settings: "wdth" 100;
+  /* No rubber-band past the page edges in the home-screen app. */
+  overscroll-behavior-y: none;
+}
+
+/* iOS renders date inputs shorter than text inputs, with centred text. */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 2.875rem;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+/* On phones, the tab bar would ride up on top of the keyboard; hide it while typing. */
+@media (pointer: coarse) {
+  body:has(:is(input:not([type="checkbox"], [type="radio"], [type="hidden"]), textarea, select):focus) nav.tab-bar {
+    display: none;
+  }
 }
 
 /* Race-bib numerals: condensed, heavy, tabular. */
