@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, coachMessages, dailyHealth, planChanges } from "@/db/schema";
-import { addDays, diffDays, formatDay, startOfWeek, todayLocal, weekday, WEEKDAYS } from "../dates";
+import { addDays, diffDays, formatDay, startOfWeek, toLocalDate, todayLocal, weekday, WEEKDAYS } from "../dates";
 import { getActivePlan, getMarkers, getProfile, getWeeks, workoutsBetween } from "../plan-store";
 import { getKv } from "../kv";
 import { acwr, fitnessSeries } from "../training/load";
@@ -29,7 +29,14 @@ export async function fitnessToday() {
 }
 
 /** Plain-text snapshot of everything the coach needs to know right now. */
-export async function buildContext(opts: { upcomingDays?: number; excludeStrava?: boolean } = {}): Promise<string> {
+export async function buildContext(
+  opts: {
+    upcomingDays?: number;
+    excludeStrava?: boolean;
+    /** Days of coach chat to include; older messages are left out so passing remarks don't linger. */
+    conversationDays?: number;
+  } = {},
+): Promise<string> {
   const today = todayLocal();
   const profile = await getProfile();
   const m = await getMarkers(profile);
@@ -173,10 +180,17 @@ export async function buildContext(opts: { upcomingDays?: number; excludeStrava?
     );
   }
 
-  const messages = await db.select().from(coachMessages).orderBy(desc(coachMessages.createdAt)).limit(8);
+  const since = addDays(today, -(opts.conversationDays ?? 3));
+  const messages = (await db.select().from(coachMessages).orderBy(desc(coachMessages.createdAt)).limit(8))
+    .map((msg) => ({ ...msg, date: toLocalDate(msg.createdAt) }))
+    .filter((msg) => msg.date >= since);
   if (messages.length) {
-    out.push("\n## Recent conversation");
-    for (const msg of messages.reverse()) out.push(`${msg.role === "user" ? "Athlete" : "Coach"}: ${msg.content}`);
+    out.push("\n## Recent conversation (dated; what was said applies to when it was said)");
+    for (const msg of messages.reverse()) {
+      const ago = diffDays(msg.date, today);
+      const when = `${formatDay(msg.date)}, ${ago === 0 ? "today" : ago === 1 ? "yesterday" : `${ago} days ago`}`;
+      out.push(`${msg.role === "user" ? "Athlete" : "Coach"} (${when}): ${msg.content}`);
+    }
   }
 
   const pending = await db.select().from(planChanges).where(eq(planChanges.status, "pending"));

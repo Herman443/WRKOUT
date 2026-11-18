@@ -26,7 +26,7 @@ export async function handleCoachNote(text: string, trigger: "coach_note" | "mis
 
   const res = await runStructured({
     purpose: trigger,
-    context: await buildContext(),
+    context: await buildContext({ conversationDays: trigger === "coach_note" ? 7 : 3 }),
     task,
     schema: replySchema,
     effort: "medium",
