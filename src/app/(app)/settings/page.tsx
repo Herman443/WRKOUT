@@ -7,13 +7,13 @@ import { PageTitle, Panel, Section, Skeleton, TextLink } from "@/components/ui";
 import { db } from "@/db";
 import { aiCalls } from "@/db/schema";
 import { logout } from "@/app/login/actions";
-import { deriveMarkers } from "@/lib/athlete";
 import { requireSession } from "@/lib/auth";
 import { formatDay, todayLocal } from "@/lib/dates";
 import { env } from "@/lib/env";
 import { getKv } from "@/lib/kv";
-import { getActivePlan, getProfile } from "@/lib/plan-store";
+import { getActivePlan, getMarkers, getProfile } from "@/lib/plan-store";
 import { stravaMcpStatus } from "@/lib/strava/mcp-auth";
+import { EASY_PACE_WINDOW_DAYS, MIN_RUNS, MIN_SAMPLE_SEC } from "@/lib/training/easy-pace";
 import { formatPace } from "@/lib/training/vdot";
 import { disconnectStrava, saveProfile, syncNow } from "../actions";
 
@@ -39,7 +39,7 @@ async function Settings({ searchParams }: Pick<PageProps<"/settings">, "searchPa
       .from(aiCalls)
       .where(gte(aiCalls.createdAt, monthStart)),
   ]);
-  const m = deriveMarkers(profile);
+  const m = await getMarkers(profile);
   const garminConfigured = !!process.env.GARMIN_API_KEY;
   const keyExpires = process.env.GARMIN_API_KEY_EXPIRES;
   const message = typeof params.message === "string" ? params.message : null;
@@ -140,12 +140,20 @@ async function Settings({ searchParams }: Pick<PageProps<"/settings">, "searchPa
 
       <Section title="Your numbers">
         {m.zones.runPaces ? (
-          <p className="text-[15px]">
-            Easy <span className="num">{formatPace(m.zones.runPaces.easy[0])}–{formatPace(m.zones.runPaces.easy[1])}</span>, threshold{" "}
-            <span className="num">{formatPace(m.zones.runPaces.threshold)}</span>, interval{" "}
-            <span className="num">{formatPace(m.zones.runPaces.interval)}</span> per km
-            {m.vdot && <span className="text-muted"> (VDOT {m.vdot.toFixed(1)} from {m.vdotSource})</span>}.
-          </p>
+          <>
+            <p className="text-[15px]">
+              Recovery <span className="num">{formatPace(m.zones.runPaces.recovery[0])}–{formatPace(m.zones.runPaces.recovery[1])}</span>, easy{" "}
+              <span className="num">{formatPace(m.zones.runPaces.easy[0])}–{formatPace(m.zones.runPaces.easy[1])}</span>, threshold{" "}
+              <span className="num">{formatPace(m.zones.runPaces.threshold)}</span>, interval{" "}
+              <span className="num">{formatPace(m.zones.runPaces.interval)}</span> per km
+              {m.vdot && <span className="text-muted"> (VDOT {m.vdot.toFixed(1)} from {m.vdotSource})</span>}.
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              {m.learnedEasyPace
+                ? `Easy pace is learned from your last ${m.learnedEasyPace.runs} easy runs (${Math.round(m.learnedEasyPace.sampleSec / 60)} min with heart rate in Z2), so it follows your fitness.`
+                : `Easy pace ${m.easyPaceSource === "zone 2 pace" ? "starts at your zone 2 pace" : "comes from your VDOT"} for now. ${m.zones.runHr ? "Once" : "Set heart-rate zones; then, once"} the last ${EASY_PACE_WINDOW_DAYS / 7} weeks hold ${MIN_RUNS} easy runs and ${MIN_SAMPLE_SEC / 60} min with heart rate in Z2, it is learned from them.`}
+            </p>
+          </>
         ) : (
           <p className="text-[15px] text-muted">Add a recent race time or your zone 2 pace to get personal paces.</p>
         )}

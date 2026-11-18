@@ -6,9 +6,8 @@ import { KIND_LABEL, formatTarget } from "@/components/steps";
 import { Skeleton } from "@/components/ui";
 import { db } from "@/db";
 import { plannedWorkouts } from "@/db/schema";
-import { deriveMarkers } from "@/lib/athlete";
 import { requireSession } from "@/lib/auth";
-import { getProfile } from "@/lib/plan-store";
+import { getMarkers, getProfile } from "@/lib/plan-store";
 import { stepLevel } from "@/lib/training/intensity";
 import { formatKmh, kmhFromPace } from "@/lib/training/treadmill";
 import { round1, stepKmh, type LiveStep } from "@/lib/training/treadmill-live";
@@ -32,7 +31,7 @@ async function Treadmill({ searchParams }: Pick<PageProps<"/treadmill">, "search
   ]);
   if (id && (!w || w.sport !== "run")) notFound();
 
-  const easy = deriveMarkers(profile).zones.runPaces?.easy;
+  const easy = (await getMarkers(profile)).zones.runPaces?.easy;
   const startKmh = easy ? round1(kmhFromPace((easy[0] + easy[1]) / 2)) : 10;
 
   // A planned session without steps still gets one, so its length counts down.

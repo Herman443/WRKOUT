@@ -34,16 +34,31 @@ export interface RunPaces {
   vdot: number;
   /** [fast, slow] sec/km */
   easy: [number, number];
+  /** [fast, slow] sec/km, slower than easy, for recovery runs */
+  recovery: [number, number];
   marathon: number;
   threshold: number;
   interval: number;
   repetition: number;
 }
 
-export function trainingPaces(vdot: number): RunPaces {
+/** Easy band width when anchored on an observed zone 2 pace, and recovery offsets (sec/km). */
+const EASY_BAND_FROM_ZONE2 = 35;
+const RECOVERY_OFFSET: [number, number] = [15, 40];
+
+/**
+ * Daniels training paces. A known zone 2 pace is an observed easy pace, so it becomes the
+ * fast end of the easy band instead of the model's guess (which sits ~15-20 s/km faster).
+ */
+export function trainingPaces(vdot: number, zone2PaceSecPerKm?: number | null): RunPaces {
+  const modelEasy: [number, number] = [paceAtFraction(vdot, 0.68), paceAtFraction(vdot, 0.6)];
+  const easy: [number, number] = zone2PaceSecPerKm
+    ? [zone2PaceSecPerKm, Math.max(modelEasy[1], zone2PaceSecPerKm + EASY_BAND_FROM_ZONE2)]
+    : modelEasy;
   return {
     vdot,
-    easy: [paceAtFraction(vdot, 0.68), paceAtFraction(vdot, 0.6)],
+    easy,
+    recovery: [easy[1] + RECOVERY_OFFSET[0], easy[1] + RECOVERY_OFFSET[1]],
     marathon: predictRaceTime(vdot, 42195) / 42.195,
     threshold: paceAtFraction(vdot, 0.88),
     interval: paceAtFraction(vdot, 0.975),

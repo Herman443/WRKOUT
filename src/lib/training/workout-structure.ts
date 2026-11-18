@@ -86,7 +86,8 @@ export function flattenSteps(steps: Step[]): SimpleStep[] {
   );
 }
 
-function stepPace(step: SimpleStep, fallbackPace: number): number {
+/** Expected pace of a step (sec/km): the middle of its pace band, else the fallback. */
+export function stepPace(step: SimpleStep, fallbackPace: number): number {
   const t = step.target;
   if (t.type === "pace" && t.low && t.high) return (t.low + t.high) / 2;
   if (t.type === "pace" && (t.low || t.high)) return (t.low ?? t.high)!;

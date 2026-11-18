@@ -1,7 +1,8 @@
 import { setRunSurface } from "@/app/(app)/actions";
 import type { PlannedWorkout } from "@/db/schema";
 import { formatKmh, kmhFromPace, type RunSurface } from "@/lib/training/treadmill";
-import { flattenSteps } from "@/lib/training/workout-structure";
+import { stepLevel } from "@/lib/training/intensity";
+import { flattenSteps, type WorkoutType } from "@/lib/training/workout-structure";
 import { formatPace } from "@/lib/training/vdot";
 import { Silhouette } from "./silhouette";
 import { StepList } from "./steps";
@@ -20,6 +21,12 @@ function keyTarget(w: PlannedWorkout, treadmill: boolean) {
   const hardest = work.sort((a, b) => (a.target.low ?? 9999) - (b.target.low ?? 9999))[0];
   if (!hardest) return null;
   const t = hardest.target;
+  // On easy work the whole band matters (the slow end is fine), so show the range, slowest
+  // speed first on the belt. Quality work headlines the faster bound it should reach.
+  const easy = stepLevel(hardest, w.type as WorkoutType) <= 2 && t.low && t.high && t.low !== t.high;
+  if (t.type === "pace" && easy && treadmill)
+    return { value: `${formatKmh(kmhFromPace(t.high!))}–${formatKmh(kmhFromPace(t.low!))}`, unit: "km/h", label: "Work speed" };
+  if (t.type === "pace" && easy) return { value: `${formatPace(t.low!)}–${formatPace(t.high!)}`, unit: "/km", label: "Work pace" };
   if (t.type === "pace" && t.low && treadmill) return { value: formatKmh(kmhFromPace(t.low)), unit: "km/h", label: "Work speed" };
   if (t.type === "pace" && t.low) return { value: formatPace(t.low), unit: "/km", label: "Work pace" };
   if (t.type === "power" && t.low) return { value: `${Math.round(t.low)}`, unit: "W", label: t.zone ?? "Power" };

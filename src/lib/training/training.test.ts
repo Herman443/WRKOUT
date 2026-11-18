@@ -37,6 +37,19 @@ describe("VDOT (vs Daniels' tables)", () => {
     expect(p50.repetition).toBeLessThan(p50.interval);
     expect(Math.abs(trainingPaces(40).threshold - 306)).toBeLessThan(4); // 5:06/km
   });
+  it("anchors the easy band on an observed zone 2 pace", () => {
+    const p = trainingPaces(vdotFromEasyPace(390), 390); // 6:30/km
+    expect(p.easy[0]).toBe(390);
+    expect(p.easy[1]).toBeGreaterThanOrEqual(390 + 35);
+    // A zone 2 pace slower than the model's whole band still wins.
+    const slow = trainingPaces(50, 400);
+    expect(slow.easy).toEqual([400, 435]);
+  });
+  it("puts recovery pace slower than easy", () => {
+    const p = trainingPaces(45);
+    expect(p.recovery[0]).toBeGreaterThan(p.easy[1]);
+    expect(p.recovery[0]).toBeLessThan(p.recovery[1]);
+  });
   it("estimates VDOT from easy pace", () => {
     expect(vdotFromEasyPace(330)).toBeGreaterThan(42);
     expect(vdotFromEasyPace(330)).toBeLessThan(52);

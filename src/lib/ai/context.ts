@@ -2,9 +2,8 @@ import "server-only";
 import { and, asc, desc, eq, gte, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, coachMessages, dailyHealth, planChanges } from "@/db/schema";
-import { deriveMarkers } from "../athlete";
 import { addDays, diffDays, formatDay, startOfWeek, todayLocal, weekday, WEEKDAYS } from "../dates";
-import { getActivePlan, getProfile, getWeeks, workoutsBetween } from "../plan-store";
+import { getActivePlan, getMarkers, getProfile, getWeeks, workoutsBetween } from "../plan-store";
 import { getKv } from "../kv";
 import { acwr, fitnessSeries } from "../training/load";
 import { activeSec } from "../training/active-time";
@@ -33,7 +32,7 @@ export async function fitnessToday() {
 export async function buildContext(opts: { upcomingDays?: number; excludeStrava?: boolean } = {}): Promise<string> {
   const today = todayLocal();
   const profile = await getProfile();
-  const m = deriveMarkers(profile);
+  const m = await getMarkers(profile);
   const active = await getActivePlan();
   const out: string[] = [];
 
@@ -55,9 +54,17 @@ export async function buildContext(opts: { upcomingDays?: number; excludeStrava?
     const p = m.zones.runPaces;
     if (p)
       out.push(
-        `Run paces (sec/km): Easy ${Math.round(p.easy[0])}–${Math.round(p.easy[1])} (${formatPace(p.easy[0])}–${formatPace(p.easy[1])}/km), Marathon ${Math.round(p.marathon)} (${formatPace(p.marathon)}), Threshold ${Math.round(p.threshold)} (${formatPace(p.threshold)}), Interval ${Math.round(p.interval)} (${formatPace(p.interval)}), Repetition ${Math.round(p.repetition)} (${formatPace(p.repetition)})`,
+        `Run paces (sec/km): Recovery ${Math.round(p.recovery[0])}–${Math.round(p.recovery[1])} (${formatPace(p.recovery[0])}–${formatPace(p.recovery[1])}/km), Easy ${Math.round(p.easy[0])}–${Math.round(p.easy[1])} (${formatPace(p.easy[0])}–${formatPace(p.easy[1])}/km)${
+          m.learnedEasyPace
+            ? ` (fast end learned from ${m.learnedEasyPace.runs} recent easy runs at Z2 heart rate; it updates itself, so don't propose zone 2 pace changes)`
+            : m.easyPaceSource === "zone 2 pace"
+              ? " (fast end is the athlete's own zone 2 pace)"
+              : ""
+        }, Marathon ${Math.round(p.marathon)} (${formatPace(p.marathon)}), Threshold ${Math.round(p.threshold)} (${formatPace(p.threshold)}), Interval ${Math.round(p.interval)} (${formatPace(p.interval)}), Repetition ${Math.round(p.repetition)} (${formatPace(p.repetition)})`,
       );
     out.push(`Run HR zones: ${zoneLine(m.zones.runHr, (n) => `${n}`)}`);
+    const z2 = m.zones.runHr?.[1];
+    if (z2) out.push(`Easy-day heart-rate cap: ${z2.high} bpm (top of run Z2).`);
     out.push(`Bike HR zones: ${zoneLine(m.zones.bikeHr, (n) => `${n}`)}`);
     if (m.zones.bikePower) out.push(`Power zones (W): ${zoneLine(m.zones.bikePower, (n) => `${n}`)}`);
     const a = profile.availability;

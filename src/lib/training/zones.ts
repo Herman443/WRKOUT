@@ -49,6 +49,7 @@ export function powerZones(ftp: number): Zone[] {
 /** Run pace zones (sec/km, low = faster bound) derived from VDOT paces. */
 export function paceZones(p: RunPaces): Zone[] {
   return [
+    { name: "Recovery", low: p.recovery[0], high: p.recovery[1] },
     { name: "Easy", low: p.easy[0], high: p.easy[1] },
     { name: "Marathon", low: p.marathon - 5, high: p.marathon + 5 },
     { name: "Threshold", low: p.threshold - 4, high: p.threshold + 4 },
@@ -59,6 +60,8 @@ export function paceZones(p: RunPaces): Zone[] {
 
 export interface AthleteMarkers {
   vdot?: number | null;
+  /** Observed comfortable zone 2 pace, sec/km; anchors the easy band */
+  zone2PaceSecPerKm?: number | null;
   maxHr?: number | null;
   restingHr?: number | null;
   lthrRun?: number | null;
@@ -75,7 +78,7 @@ export interface AthleteZones {
 }
 
 export function computeZones(m: AthleteMarkers): AthleteZones {
-  const runPaces = m.vdot ? trainingPaces(m.vdot) : null;
+  const runPaces = m.vdot ? trainingPaces(m.vdot, m.zone2PaceSecPerKm) : null;
   const runHr = m.lthrRun
     ? hrZonesFromLthr(m.lthrRun, "run")
     : m.maxHr

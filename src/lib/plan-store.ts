@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  activities,
   athleteProfile,
   goals,
   planChanges,
@@ -11,17 +12,41 @@ import {
   type PlannedWorkout,
   type PlanWeek,
 } from "@/db/schema";
-import { deriveMarkers } from "./athlete";
+import { deriveMarkers, type Markers } from "./athlete";
 import { addDays, startOfWeek, todayLocal } from "./dates";
+import { activeSec } from "./training/active-time";
+import { EASY_PACE_WINDOW_DAYS, learnEasyPace } from "./training/easy-pace";
 import { applyOps, classifyChanges, type ChangeOp, type ChangeSet } from "./training/changes";
 import { checkWeek } from "./training/guardrails";
 import { estimateWorkoutLoad } from "./training/load";
 import type { PlannedLite, PlannedWorkoutInput } from "./training/planned";
-import { flattenSteps, structureTotals, type WorkoutType } from "./training/workout-structure";
+import { paceTrusted } from "./training/treadmill";
+import { flattenSteps, stepPace, structureTotals, type WorkoutType } from "./training/workout-structure";
 
 export async function getProfile() {
   const [p] = await db.select().from(athleteProfile).where(eq(athleteProfile.id, 1));
   return p ?? null;
+}
+
+/** Markers with the easy band learned from recent Z2 running when there is enough of it. */
+export async function getMarkers(profile?: Awaited<ReturnType<typeof getProfile>>): Promise<Markers> {
+  const p = profile === undefined ? await getProfile() : profile;
+  const z2 = deriveMarkers(p).zones.runHr?.[1];
+  if (!z2) return deriveMarkers(p);
+  const rows = await db
+    .select({
+      laps: activities.laps,
+      subSport: activities.subSport,
+      extra: activities.extra,
+      durationSec: activities.durationSec,
+      movingSec: activities.movingSec,
+      distanceM: activities.distanceM,
+      avgHr: activities.avgHr,
+    })
+    .from(activities)
+    .where(and(eq(activities.sport, "run"), gte(activities.localDate, addDays(todayLocal(), -EASY_PACE_WINDOW_DAYS))));
+  const runs = rows.filter(paceTrusted).map((r) => ({ laps: r.laps, activeSec: activeSec(r), distanceM: r.distanceM, avgHr: r.avgHr }));
+  return deriveMarkers(p, learnEasyPace(runs, z2));
 }
 
 export async function getActivePlan() {
@@ -73,7 +98,7 @@ function toRow(planId: string, weekId: string | null, w: PlannedWorkoutInput, ea
       s.duration.type === "time"
         ? (s.duration.value ?? 0)
         : s.duration.type === "distance"
-          ? ((s.duration.value ?? 0) / 1000) * (s.target.type === "pace" && s.target.low ? s.target.low : easyPace)
+          ? ((s.duration.value ?? 0) / 1000) * stepPace(s, easyPace)
           : 0,
   }));
   return {
@@ -95,7 +120,7 @@ function toRow(planId: string, weekId: string | null, w: PlannedWorkoutInput, ea
 }
 
 async function easyPace() {
-  const m = deriveMarkers(await getProfile());
+  const m = await getMarkers();
   return m.zones.runPaces ? (m.zones.runPaces.easy[0] + m.zones.runPaces.easy[1]) / 2 : 360;
 }
 
