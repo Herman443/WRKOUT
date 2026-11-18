@@ -7,8 +7,17 @@ import { useEffect } from "react";
 export function AutoRefresh({ seconds = 10 }: { seconds?: number }) {
   const router = useRouter();
   useEffect(() => {
-    const id = setInterval(() => router.refresh(), seconds * 1000);
-    return () => clearInterval(id);
+    const refresh = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) router.refresh();
+    };
+    const id = setInterval(refresh, seconds * 1000);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("online", refresh);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("online", refresh);
+    };
   }, [router, seconds]);
   return null;
 }

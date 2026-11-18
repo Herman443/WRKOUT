@@ -9,7 +9,7 @@ import { analyses, coachMessages, jobs, planChanges, plannedWorkouts, type PlanC
 import type { MarkerUpdate } from "@/lib/ai/review";
 import { requireSession } from "@/lib/auth";
 import { formatDay } from "@/lib/dates";
-import { getKv } from "@/lib/ingest";
+import { getKv } from "@/lib/kv";
 import type { ChangeOp } from "@/lib/training/changes";
 import { compactDuration, formatPace } from "@/lib/training/vdot";
 import { applyMarkerUpdates, decideProposal, sendCoachNote } from "../actions";
@@ -35,18 +35,18 @@ const MARKER_LABEL: Record<string, (v: number) => string> = {
 
 async function Coach() {
   await requireSession();
-  const [pending, messages, [weekly], markerUpdates, thinking] = await Promise.all([
+  const [pending, messages, [weekly], markerUpdates, thinking, recentChanges] = await Promise.all([
     db.select().from(planChanges).where(eq(planChanges.status, "pending")).orderBy(desc(planChanges.createdAt)),
     db.select().from(coachMessages).orderBy(desc(coachMessages.createdAt)).limit(30),
     db.select().from(analyses).where(eq(analyses.kind, "weekly")).orderBy(desc(analyses.createdAt)).limit(1),
     getKv<MarkerUpdate[]>("pending_marker_updates"),
-    db.select({ id: jobs.id }).from(jobs).where(inArray(jobs.status, ["queued", "running"])).then((rows) => rows.length > 0),
+    db.select({ id: jobs.id }).from(jobs).where(inArray(jobs.status, ["queued", "running"])).limit(1).then((rows) => rows.length > 0),
+    db.select().from(planChanges).where(eq(planChanges.status, "applied")).orderBy(desc(planChanges.createdAt)).limit(5),
   ]);
   const ids = pending.flatMap((c) => c.ops.flatMap((op) => ("workoutId" in op ? [op.workoutId] : [])));
   const workouts = ids.length ? await db.select().from(plannedWorkouts).where(inArray(plannedWorkouts.id, ids)) : [];
   const byId = new Map(workouts.map((w) => [w.id, w]));
   const thread = [...messages].reverse();
-  const recentChanges = await db.select().from(planChanges).where(eq(planChanges.status, "applied")).orderBy(desc(planChanges.createdAt)).limit(5);
 
   return (
     <>

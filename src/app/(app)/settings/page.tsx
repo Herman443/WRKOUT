@@ -11,7 +11,7 @@ import { deriveMarkers } from "@/lib/athlete";
 import { requireSession } from "@/lib/auth";
 import { formatDay, todayLocal } from "@/lib/dates";
 import { env } from "@/lib/env";
-import { getKv } from "@/lib/ingest";
+import { getKv } from "@/lib/kv";
 import { getActivePlan, getProfile } from "@/lib/plan-store";
 import { stravaMcpStatus } from "@/lib/strava/mcp-auth";
 import { formatPace } from "@/lib/training/vdot";

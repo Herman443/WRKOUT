@@ -10,7 +10,7 @@ import { db } from "@/db";
 import { activities, plannedWorkouts } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
 import { addDays, formatDay, startOfWeek, todayLocal } from "@/lib/dates";
-import { getKv } from "@/lib/ingest";
+import { getKv } from "@/lib/kv";
 import type { RunSurface } from "@/lib/training/treadmill";
 import { formatDuration } from "@/lib/training/vdot";
 import { moveWorkout, setWorkoutStatus } from "../../actions";
@@ -29,10 +29,13 @@ async function Workout({ params }: Pick<PageProps<"/workout/[id]">, "params">) {
   await requireSession();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const [w] = await db.select().from(plannedWorkouts).where(eq(plannedWorkouts.id, id));
+  const [[w], savedSurface] = await Promise.all([
+    db.select().from(plannedWorkouts).where(eq(plannedWorkouts.id, id)),
+    getKv<RunSurface>("run_surface"),
+  ]);
   if (!w) notFound();
   const [activity] = w.activityId ? await db.select().from(activities).where(eq(activities.id, w.activityId)) : [];
-  const surface = (await getKv<RunSurface>("run_surface")) ?? "outdoor";
+  const surface = savedSurface ?? "outdoor";
   const today = todayLocal();
   const weekEnd = addDays(startOfWeek(w.date), 6);
   const canChange = w.status !== "completed" && w.date >= today;

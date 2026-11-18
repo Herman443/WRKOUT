@@ -1,5 +1,5 @@
 import { Check } from "lucide-react";
-import Link from "next/link";
+import { DayLink } from "./day-selection";
 import type { Activity, PlannedWorkout } from "@/db/schema";
 import { addDays, formatDay, WEEKDAYS } from "@/lib/dates";
 import { compactDuration } from "@/lib/training/vdot";
@@ -13,6 +13,7 @@ export function WeekStrip({ weekStart, today, selectedDate, workouts, runs }: {
   workouts: PlannedWorkout[];
   runs: Pick<Activity, "id" | "localDate" | "name" | "durationSec" | "distanceM" | "startTime">[];
 }) {
+  const dates = WEEKDAYS.map((_, i) => addDays(weekStart, i));
   return (
     <ol className="week-strip grid grid-cols-7 gap-1">
       {WEEKDAYS.map((d, i) => {
@@ -25,11 +26,11 @@ export function WeekStrip({ weekStart, today, selectedDate, workouts, runs }: {
         const faded = main?.status === "missed" || (date < today && !done);
         return (
           <li key={date}>
-            <Link
-              href={`/?day=${date}`}
-              scroll={false}
+            <DayLink
+              date={date}
+              selectedDate={selectedDate}
+              dates={dates}
               aria-label={formatDay(date, { weekday: "long", day: "numeric", month: "long" })}
-              aria-current={date === selectedDate ? "true" : undefined}
               className="week-day flex h-28 flex-col rounded-xl px-1 pt-2 pb-2"
             >
               <div className="flex flex-col items-center gap-1 text-[11px] text-muted">
@@ -57,7 +58,7 @@ export function WeekStrip({ weekStart, today, selectedDate, workouts, runs }: {
               <div className="mt-1 flex h-3.5 items-center justify-center text-good">
                 {done && <Check size={14} strokeWidth={3} aria-label="Done" />}
               </div>
-            </Link>
+            </DayLink>
           </li>
         );
       })}

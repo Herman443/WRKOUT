@@ -1,6 +1,7 @@
-import { and, between, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, between, desc, eq, gt, inArray, lte } from "drizzle-orm";
 import Link from "next/link";
-import { Suspense } from "react";
+import { cache, Suspense, type ReactNode } from "react";
+import { DaySelection } from "@/components/day-selection";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { PaceProfile } from "@/components/pace-profile";
 import { SubmitButton } from "@/components/submit-button";
@@ -8,31 +9,28 @@ import { Panel, PageTitle, Section, Skeleton, StartTreadmill, TextLink } from "@
 import { WeekStrip } from "@/components/week-strip";
 import { WorkoutHero } from "@/components/workout-hero";
 import { db } from "@/db";
-import { activities, analyses, dailyHealth, planChanges } from "@/db/schema";
+import { activities, analyses, dailyHealth, planChanges, plannedWorkouts } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
 import { addDays, dateRange, formatDay, localTime, startOfWeek, todayLocal } from "@/lib/dates";
-import { getKv } from "@/lib/ingest";
+import { getKv } from "@/lib/kv";
 import { getActivePlan, workoutsBetween } from "@/lib/plan-store";
 import { paceTrusted, type RunSurface } from "@/lib/training/treadmill";
 import { formatDuration } from "@/lib/training/vdot";
 import { retryPlan } from "./actions";
 
-export default function TodayPage({ searchParams }: PageProps<"/">) {
+export default function TodayPage() {
   return (
     <Suspense fallback={<Skeleton lines={4} />}>
-      <Today searchParams={searchParams} />
+      <Today />
     </Suspense>
   );
 }
 
-async function Today({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
+async function Today() {
   await requireSession();
   const today = todayLocal();
   const weekStart = startOfWeek(today);
   const weekEnd = addDays(weekStart, 6);
-  const { day } = await searchParams;
-  const viewingDay = typeof day === "string" && dateRange(weekStart, weekEnd).includes(day);
-  const selectedDate = viewingDay ? day : today;
   const [active, runs] = await Promise.all([
     getActivePlan(),
     db.select({
@@ -49,10 +47,11 @@ async function Today({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
       .where(and(eq(activities.sport, "run"), between(activities.localDate, weekStart, today)))
       .orderBy(desc(activities.startTime)),
   ]);
-  const dateLine = formatDay(selectedDate, { weekday: "long", day: "numeric", month: "long" });
-  const dayRuns = runs.filter((run) => run.localDate === selectedDate);
-  const hasCompletedRun = dayRuns.length > 0;
-  const daySessions = (workouts: Parameters<typeof WeekStrip>[0]["workouts"], surface?: RunSurface) => {
+  const dateLine = formatDay(today, { weekday: "long", day: "numeric", month: "long" });
+  const hasCompletedRun = runs.some((run) => run.localDate === today);
+  const daySessions = (workouts: Parameters<typeof WeekStrip>[0]["workouts"], surface?: RunSurface, selectedDate = today) => {
+    const dayRuns = runs.filter((run) => run.localDate === selectedDate);
+    const hasCompletedRun = dayRuns.length > 0;
     const dayWorkouts = workouts.filter((workout) =>
       workout.date === selectedDate && workout.status !== "skipped" &&
       !dayRuns.some((run) => run.id === workout.activityId)
@@ -96,22 +95,25 @@ async function Today({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
     );
   };
   const completedRunHero = hasCompletedRun ? daySessions([]) : null;
-  const selectedDayWithoutPlan = viewingDay && (
-    <>
-      <p className="text-sm text-muted">{dateLine}</p>
-      {daySessions([])}
-    </>
-  );
+  const days = dateRange(weekStart, weekEnd);
+  const dayOptions = (workouts: Parameters<typeof WeekStrip>[0]["workouts"], surface?: RunSurface, readiness?: ReactNode) =>
+    Object.fromEntries(days.map((date) => [date, <div key={date}>
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-sm text-muted">{formatDay(date, { weekday: "long", day: "numeric", month: "long" })}</p>
+        {readiness}
+      </div>
+      {daySessions(workouts, surface, date)}
+    </div>]));
   const weekOverview = (workouts: Parameters<typeof WeekStrip>[0]["workouts"]) => (
     <Section title="This week" action={active && <TextLink href="/plan">Full plan</TextLink>}>
-      <WeekStrip weekStart={weekStart} today={today} selectedDate={selectedDate} workouts={workouts} runs={runs} />
+      <WeekStrip weekStart={weekStart} today={today} selectedDate={today} workouts={workouts} runs={runs} />
     </Section>
   );
 
   if (!active) {
     return (
       <>
-        {selectedDayWithoutPlan || completedRunHero || <PageTitle sub={dateLine}>Set a goal to get your plan</PageTitle>}
+        <DaySelection days={dayOptions([])}>{completedRunHero || <PageTitle sub={dateLine}>Set a goal to get your plan</PageTitle>}</DaySelection>
         <p className="mt-3 max-w-prose text-muted">
           Pick a race or event, tell the coach about your week and your current speed, and it builds the training up to race day.
         </p>
@@ -127,9 +129,9 @@ async function Today({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   if (plan.status === "generating" || plan.status === "failed") {
     return (
       <>
-        {selectedDayWithoutPlan || completedRunHero || (
+        <DaySelection days={dayOptions([])}>{completedRunHero || (
           <PageTitle sub={dateLine}>{plan.status === "failed" ? "The plan could not be built" : "Building your plan"}</PageTitle>
-        )}
+        )}</DaySelection>
         {plan.status === "generating" ? (
           <>
             <p className="mt-3 max-w-prose text-muted">
@@ -155,65 +157,94 @@ async function Today({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
     );
   }
 
-  const [week, [health], pending, [latest], surface] = await Promise.all([
+  const [week, surface, [next]] = await Promise.all([
     workoutsBetween(plan.id, weekStart, weekEnd),
-    db.select().from(dailyHealth).where(eq(dailyHealth.date, today)),
-    db.select({ id: planChanges.id }).from(planChanges).where(eq(planChanges.status, "pending")),
-    db.select().from(analyses).orderBy(desc(analyses.createdAt)).limit(1),
     getKv<RunSurface>("run_surface").then((s) => s ?? "outdoor"),
+    db.select().from(plannedWorkouts).where(and(
+      eq(plannedWorkouts.planId, plan.id), gt(plannedWorkouts.date, today),
+      lte(plannedWorkouts.date, goal.eventDate), eq(plannedWorkouts.status, "planned"), eq(plannedWorkouts.sport, "run"),
+    )).orderBy(asc(plannedWorkouts.date), asc(plannedWorkouts.createdAt)).limit(1),
   ]);
   const todays = week.filter((w) => w.date === today && w.status !== "skipped");
   const main = hasCompletedRun ? undefined : todays.find((w) => w.status === "planned" && w.sport === "run");
-  const next = !viewingDay && !hasCompletedRun && !main
-    ? (await workoutsBetween(plan.id, addDays(today, 1), goal.eventDate)).find((w) => w.status === "planned" && w.sport === "run")
-    : null;
   const otherWorkouts = todays.filter((w) => w.id !== main?.id && (!hasCompletedRun || w.status !== "completed" || w.sport !== "run"));
-  const generating = await db
-    .select({ id: activities.id })
-    .from(activities)
-    .where(inArray(activities.analysisStatus, ["pending", "running"]));
 
   return (
     <>
-      <div className="flex items-start justify-between gap-4">
-        <p className="text-sm text-muted">{dateLine}</p>
-        {health && <Readiness hrv={health.hrvMs} hrvStatus={health.hrvStatus} sleepSec={health.sleepSec} />}
-      </div>
+      <DaySelection days={dayOptions(week, surface, <Suspense><TodayReadiness today={today} /></Suspense>)}>
+        <div className="flex items-start justify-between gap-4">
+          <p className="text-sm text-muted">{dateLine}</p>
+          {<Suspense><TodayReadiness today={today} /></Suspense>}
+        </div>
 
-      {viewingDay ? daySessions(week, surface) : completedRunHero ?? (main ? (
-        <article className="session-feature mt-4">
-          <Link href={`/workout/${main.id}`}>
-            <h1 className="text-[30px] leading-tight font-semibold tracking-tight">{main.title}</h1>
-          </Link>
-          <p className="mt-1 text-muted">{main.key ? "Key session" : sessionKind(main.type)}</p>
-          <WorkoutHero workout={main} surface={surface} />
-          <div className="mt-6">
-            <StartTreadmill workoutId={main.id} quiet={surface !== "treadmill"}>
-              Start on the treadmill
-            </StartTreadmill>
-          </div>
-        </article>
-      ) : next ? (
-        <article className="session-feature mt-4">
-          <p className="text-sm text-muted">Next run, {formatDay(next.date)}</p>
-          <Link href={`/workout/${next.id}`}>
-            <h1 className="text-[30px] leading-tight font-semibold tracking-tight">{next.title}</h1>
-          </Link>
-          <WorkoutHero workout={next} surface={surface} />
-        </article>
-      ) : (
-        <h1 className="mt-1 text-[30px] leading-tight font-semibold tracking-tight">{todays.length ? "Today’s sessions" : "Rest day"}</h1>
-      ))}
-      {!viewingDay && otherWorkouts.length > 0 && (
-        <ul className="mt-4 space-y-2 text-sm">
-          {otherWorkouts.map((workout) => (
-            <li key={workout.id}>
-              <TextLink href={`/workout/${workout.id}`}>{workout.title}</TextLink>
-            </li>
-          ))}
-        </ul>
-      )}
+        {completedRunHero ?? (main ? (
+          <article className="session-feature mt-4">
+            <Link href={`/workout/${main.id}`}>
+              <h1 className="text-[30px] leading-tight font-semibold tracking-tight">{main.title}</h1>
+            </Link>
+            <p className="mt-1 text-muted">{main.key ? "Key session" : sessionKind(main.type)}</p>
+            <WorkoutHero workout={main} surface={surface} />
+            <div className="mt-6">
+              <StartTreadmill workoutId={main.id} quiet={surface !== "treadmill"}>
+                Start on the treadmill
+              </StartTreadmill>
+            </div>
+          </article>
+        ) : next ? (
+          <article className="session-feature mt-4">
+            <p className="text-sm text-muted">Next run, {formatDay(next.date)}</p>
+            <Link href={`/workout/${next.id}`}>
+              <h1 className="text-[30px] leading-tight font-semibold tracking-tight">{next.title}</h1>
+            </Link>
+            <WorkoutHero workout={next} surface={surface} />
+          </article>
+        ) : (
+          <h1 className="mt-1 text-[30px] leading-tight font-semibold tracking-tight">{todays.length ? "Today’s sessions" : "Rest day"}</h1>
+        ))}
+        {otherWorkouts.length > 0 && (
+          <ul className="mt-4 space-y-2 text-sm">
+            {otherWorkouts.map((workout) => (
+              <li key={workout.id}>
+                <TextLink href={`/workout/${workout.id}`}>{workout.title}</TextLink>
+              </li>
+            ))}
+          </ul>
+        )}
 
+      </DaySelection>
+
+      <Suspense><PendingChanges /></Suspense>
+
+      {weekOverview(week)}
+
+      <Suspense><LatestAnalysis /></Suspense>
+
+      <p className="mt-10 text-sm text-muted">
+        <Link href="/treadmill" className="text-ink underline decoration-line underline-offset-4">
+          Treadmill run without a plan
+        </Link>
+      </p>
+      <p className="mt-3 text-sm text-muted">
+        {goal.name}, {formatDay(goal.eventDate, { day: "numeric", month: "long", year: "numeric" })}
+      </p>
+    </>
+  );
+}
+
+const getReadiness = cache(async (today: string) => {
+  const [health] = await db.select({ hrvMs: dailyHealth.hrvMs, hrvStatus: dailyHealth.hrvStatus, sleepSec: dailyHealth.sleepSec })
+    .from(dailyHealth).where(eq(dailyHealth.date, today));
+  return health;
+});
+
+async function TodayReadiness({ today }: { today: string }) {
+  const health = await getReadiness(today);
+  return health && <Readiness hrv={health.hrvMs} hrvStatus={health.hrvStatus} sleepSec={health.sleepSec} />;
+}
+
+async function PendingChanges() {
+  const pending = await db.select({ id: planChanges.id }).from(planChanges).where(eq(planChanges.status, "pending"));
+  return <>
       {pending.length > 0 && (
         <Link href="/coach" className="mt-8 block rounded-2xl border border-ink px-4 py-3">
           <span className="font-medium">
@@ -223,8 +254,17 @@ async function Today({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
         </Link>
       )}
 
-      {weekOverview(week)}
+  </>;
+}
 
+async function LatestAnalysis() {
+  const [generating, [latest]] = await Promise.all([
+    db.select({ id: activities.id }).from(activities)
+      .where(inArray(activities.analysisStatus, ["pending", "running"])).limit(1),
+    db.select({ kind: analyses.kind, activityId: analyses.activityId, title: analyses.title, score: analyses.score, summary: analyses.summary })
+      .from(analyses).orderBy(desc(analyses.createdAt)).limit(1),
+  ]);
+  return <>
       {generating.length > 0 && (
         <p className="mt-6 text-sm text-muted">
           Analysing your latest session…
@@ -246,16 +286,7 @@ async function Today({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
         </Section>
       )}
 
-      <p className="mt-10 text-sm text-muted">
-        <Link href="/treadmill" className="text-ink underline decoration-line underline-offset-4">
-          Treadmill run without a plan
-        </Link>
-      </p>
-      <p className="mt-3 text-sm text-muted">
-        {goal.name}, {formatDay(goal.eventDate, { day: "numeric", month: "long", year: "numeric" })}
-      </p>
-    </>
-  );
+  </>;
 }
 
 function sessionKind(type: string) {

@@ -5,7 +5,7 @@ import { activities, coachMessages, dailyHealth, planChanges } from "@/db/schema
 import { deriveMarkers } from "../athlete";
 import { addDays, diffDays, formatDay, startOfWeek, todayLocal, weekday, WEEKDAYS } from "../dates";
 import { getActivePlan, getProfile, getWeeks, workoutsBetween } from "../plan-store";
-import { getKv } from "../ingest";
+import { getKv } from "../kv";
 import { acwr, fitnessSeries } from "../training/load";
 import { activeSec } from "../training/active-time";
 import { isTreadmill, paceTrusted, type RunSurface } from "../training/treadmill";

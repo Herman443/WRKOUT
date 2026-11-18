@@ -4,13 +4,14 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/db", () => ({ db: { select: () => ({ from: () => ({ where: async () => [] }) }) } }));
 vi.mock("./env", () => ({ env: {} }));
 vi.mock("./ingest", () => ({
-  getKv: vi.fn(), setKv: vi.fn(), logUnsyncedTreadmillSessions: vi.fn(),
+  logUnsyncedTreadmillSessions: vi.fn(),
 }));
+vi.mock("./kv", () => ({ getKv: vi.fn(), setKv: vi.fn() }));
 vi.mock("./jobs", () => ({ enqueue: vi.fn(), hasOpenJob: vi.fn(), kickWorker: vi.fn() }));
 vi.mock("./plan-store", () => ({ getActivePlan: vi.fn(), getWeeks: vi.fn(), workoutsBetween: vi.fn() }));
 vi.mock("./push", () => ({ sendPush: vi.fn() }));
 
-import { getKv, setKv } from "./ingest";
+import { getKv, setKv } from "./kv";
 import { getActivePlan, getWeeks, workoutsBetween } from "./plan-store";
 import { sendPush } from "./push";
 import { tick } from "./tick";

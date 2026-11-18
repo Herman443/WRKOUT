@@ -26,10 +26,13 @@ async function Treadmill({ searchParams }: Pick<PageProps<"/treadmill">, "search
   await requireSession();
   const { workout } = await searchParams;
   const id = typeof workout === "string" && /^[0-9a-f-]{36}$/i.test(workout) ? workout : null;
-  const [w] = id ? await db.select().from(plannedWorkouts).where(eq(plannedWorkouts.id, id)) : [];
+  const [[w], profile] = await Promise.all([
+    id ? db.select().from(plannedWorkouts).where(eq(plannedWorkouts.id, id)) : Promise.resolve([]),
+    getProfile(),
+  ]);
   if (id && (!w || w.sport !== "run")) notFound();
 
-  const easy = deriveMarkers(await getProfile()).zones.runPaces?.easy;
+  const easy = deriveMarkers(profile).zones.runPaces?.easy;
   const startKmh = easy ? round1(kmhFromPace((easy[0] + easy[1]) / 2)) : 10;
 
   // A planned session without steps still gets one, so its length counts down.

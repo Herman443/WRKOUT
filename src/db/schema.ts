@@ -130,7 +130,7 @@ export const plannedWorkouts = app.table(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("planned_workouts_date_idx").on(t.date)],
+  (t) => [index("planned_workouts_date_idx").on(t.date), index("planned_workouts_plan_date_idx").on(t.planId, t.date, t.createdAt)],
 );
 
 export type AnalysisStatus = "pending" | "waiting_garmin" | "running" | "done" | "failed" | "skipped";
@@ -172,7 +172,7 @@ export const activities = app.table(
     analysisAttempts: integer("analysis_attempts").default(0).notNull(),
     createdAt: createdAt(),
   },
-  (t) => [index("activities_start_idx").on(t.startTime), index("activities_status_idx").on(t.analysisStatus)],
+  (t) => [index("activities_start_idx").on(t.startTime), index("activities_status_idx").on(t.analysisStatus), index("activities_local_date_idx").on(t.localDate, t.sport, t.startTime)],
 );
 
 /** A treadmill run tracked live in the app; merged into the watch's activity when it syncs. */
@@ -203,7 +203,7 @@ export const analyses = app.table("analyses", {
   concerns: jsonb("concerns").$type<string[]>().default([]).notNull(),
   changeId: uuid("change_id"),
   createdAt: createdAt(),
-});
+}, (t) => [index("analyses_created_idx").on(t.createdAt), index("analyses_activity_created_idx").on(t.activityId, t.createdAt), index("analyses_kind_created_idx").on(t.kind, t.createdAt)]);
 
 export const dailyHealth = app.table("daily_health", {
   date: date("date").primaryKey(),
@@ -232,7 +232,7 @@ export const planChanges = app.table("plan_changes", {
   error: text("error"),
   createdAt: createdAt(),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
-});
+}, (t) => [index("plan_changes_status_created_idx").on(t.status, t.createdAt)]);
 
 export const coachMessages = app.table("coach_messages", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -240,7 +240,7 @@ export const coachMessages = app.table("coach_messages", {
   content: text("content").notNull(),
   changeId: uuid("change_id"),
   createdAt: createdAt(),
-});
+}, (t) => [index("coach_messages_created_idx").on(t.createdAt)]);
 
 export const pushSubscriptions = app.table("push_subscriptions", {
   endpoint: text("endpoint").primaryKey(),
@@ -296,7 +296,7 @@ export const aiCalls = app.table("ai_calls", {
   cacheReadTokens: integer("cache_read_tokens").default(0).notNull(),
   costUsd: real("cost_usd").default(0).notNull(),
   createdAt: createdAt(),
-});
+}, (t) => [index("ai_calls_created_idx").on(t.createdAt)]);
 
 /** Notes the athlete jots down about the app itself, read back with `npm run feedback`. */
 export const appFeedback = app.table(

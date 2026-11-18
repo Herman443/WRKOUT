@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { hasStarted } from "@/lib/training/treadmill-live";
-import { liveSessionHref, readLiveSession, useIsClient } from "./live-treadmill";
+import { liveSessionHref, readLiveSession, useIsClient } from "./live-session-storage";
 
 /** A way back to a treadmill session left running on this phone. */
 export function TreadmillResume() {

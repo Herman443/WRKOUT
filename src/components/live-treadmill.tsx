@@ -3,7 +3,7 @@
 import { ChevronLeft, Minus, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { finishTreadmillSession } from "@/app/(app)/actions";
 import { LEVEL_COLOR } from "@/lib/training/intensity";
 import { formatKmh } from "@/lib/training/treadmill";
@@ -23,6 +23,7 @@ import {
   type LiveState,
   type LiveStep,
 } from "@/lib/training/treadmill-live";
+import { liveSessionHref, readLiveSession, useIsClient } from "./live-session-storage";
 import { formatDuration, formatPace } from "@/lib/training/vdot";
 
 // The live treadmill screen. The session is kept in localStorage on every change, so a
@@ -32,25 +33,6 @@ import { formatDuration, formatPace } from "@/lib/training/vdot";
 /** Only ever called from taps and timers (the compiler can't tell for custom button props). */
 const clock = () => Date.now();
 
-const subscribeNothing = () => () => {};
-/** True once hydrated: the session lives in localStorage, which the server cannot see. */
-export const useIsClient = () =>
-  useSyncExternalStore(
-    subscribeNothing,
-    () => true,
-    () => false,
-  );
-
-export function readLiveSession(): LiveState | null {
-  try {
-    const s = JSON.parse(localStorage.getItem(LIVE_STORAGE_KEY) ?? "null") as LiveState | null;
-    return s?.v === 1 && s.id ? s : null;
-  } catch {
-    return null;
-  }
-}
-
-export const liveSessionHref = (s: Pick<LiveState, "workoutId">) => (s.workoutId ? `/treadmill?workout=${s.workoutId}` : "/treadmill");
 
 interface Props {
   workoutId: string | null;

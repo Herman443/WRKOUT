@@ -30,11 +30,11 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
   await requireSession();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const [a] = await db.select().from(activities).where(eq(activities.id, id));
+  const [[a], [analysis]] = await Promise.all([
+    db.select().from(activities).where(eq(activities.id, id)),
+    db.select().from(analyses).where(eq(analyses.activityId, id)).orderBy(desc(analyses.createdAt)).limit(1),
+  ]);
   if (!a) notFound();
-  const [analysis] = await db.select().from(analyses).where(eq(analyses.activityId, id)).orderBy(desc(analyses.createdAt)).limit(1);
-  const [planned] = a.plannedWorkoutId ? await db.select().from(plannedWorkouts).where(eq(plannedWorkouts.id, a.plannedWorkoutId)) : [];
-  const [change] = analysis?.changeId ? await db.select().from(planChanges).where(eq(planChanges.id, analysis.changeId)) : [];
   const runSec = activeSec(a);
   const pace = a.sport === "run" && a.distanceM ? runSec / (a.distanceM / 1000) : null;
   const speed = a.sport === "bike" && a.distanceM ? a.distanceM / 1000 / (runSec / 3600) : null;
@@ -43,8 +43,11 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
   const guessed = treadmill && !paceTrusted(a);
   const incline = treadmill ? averageIncline(a.laps) : null;
   const lapIncline = a.laps.some((l) => l.inclinePct != null);
-  const otherRuns = a.sport === "run"
-    ? await db.select({
+  const [[planned], [change], otherRuns] = await Promise.all([
+    a.plannedWorkoutId ? db.select().from(plannedWorkouts).where(eq(plannedWorkouts.id, a.plannedWorkoutId)) : [],
+    analysis?.changeId ? db.select().from(planChanges).where(eq(planChanges.id, analysis.changeId)) : [],
+    a.sport === "run"
+    ? db.select({
       id: activities.id,
       localDate: activities.localDate,
       name: activities.name,
@@ -54,7 +57,8 @@ async function ActivityView({ params }: Pick<PageProps<"/activities/[id]">, "par
     }).from(activities)
       .where(and(eq(activities.localDate, a.localDate), eq(activities.sport, "run"), ne(activities.id, id)))
       .orderBy(desc(activities.startTime))
-    : [];
+    : [],
+  ]);
 
   return (
     <>

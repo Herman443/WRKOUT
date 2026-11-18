@@ -5,7 +5,6 @@ import { db } from "@/db";
 import {
   activities,
   dailyHealth,
-  kv,
   plannedWorkouts,
   treadmillSessions,
   type Activity,
@@ -16,7 +15,7 @@ import { deriveMarkers } from "./athlete";
 import { activeSec } from "./training/active-time";
 import { addDays, toLocalDate, todayLocal } from "./dates";
 import { garmin, type GarminActivitySummary } from "./garmin/client";
-import { parseFit } from "./garmin/fit";
+import { getKv, setKv } from "./kv";
 import { mapActivitySummary } from "./garmin/map";
 import { enqueue } from "./jobs";
 import { getActivePlan, getProfile, toLite, workoutsBetween } from "./plan-store";
@@ -31,17 +30,6 @@ import { sportSchema } from "./training/workout-structure";
 // (first sync, backfill) are logged for load history without spending tokens.
 export const ANALYZE_WITHIN_DAYS = 2;
 const BACKFILL_DAYS = 42;
-
-async function getKv<T>(key: string): Promise<T | null> {
-  const [row] = await db.select().from(kv).where(eq(kv.key, key));
-  return (row?.value as T | undefined) ?? null;
-}
-
-export async function setKv(key: string, value: unknown) {
-  await db.insert(kv).values({ key, value }).onConflictDoUpdate({ target: kv.key, set: { value } });
-}
-
-export { getKv };
 
 /** Pulls new activities from Garmin. Returns the ids of activities that were added. */
 export async function pollGarmin(): Promise<string[]> {
@@ -74,6 +62,7 @@ async function ingestGarminActivity(summary: GarminActivitySummary): Promise<str
   let zoneSeconds = mapped.hrZoneSeconds;
   let np = mapped.normalizedPowerW;
   try {
+    const { parseFit } = await import("./garmin/fit");
     const fit = parseFit(await garmin.downloadActivity(garminId), mapped.sport === "bike" ? markers.zones.bikeHr : markers.zones.runHr);
     laps = fit.laps;
     hrSamples = fit.hrSamples;
@@ -331,7 +320,10 @@ export async function saveTreadmillSession(input: {
   if (!a) return null;
   let hr: [number, number][] = [];
   try {
-    if (a.garminId) hr = parseFit(await garmin.downloadActivity(a.garminId)).hrSamples;
+    if (a.garminId) {
+      const { parseFit } = await import("./garmin/fit");
+      hr = parseFit(await garmin.downloadActivity(a.garminId)).hrSamples;
+    }
   } catch (e) {
     console.warn(`FIT download failed for ${a.garminId}; treadmill laps get no heart rate`, e);
   }

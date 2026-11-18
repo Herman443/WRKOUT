@@ -19,7 +19,12 @@ export default function ActivitiesPage() {
 
 async function Activities() {
   await requireSession();
-  const rows = await db.select().from(activities).orderBy(desc(activities.startTime)).limit(60);
+  const rows = await db.select({
+    id: activities.id, localDate: activities.localDate, name: activities.name,
+    analysisStatus: activities.analysisStatus, sport: activities.sport,
+    subSport: activities.subSport, extra: activities.extra,
+    distanceM: activities.distanceM, durationSec: activities.durationSec,
+  }).from(activities).orderBy(desc(activities.startTime)).limit(60);
   return (
     <>
       <div className="flex items-end justify-between gap-4">
