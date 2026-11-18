@@ -61,7 +61,7 @@ async function Settings({ searchParams }: Pick<PageProps<"/settings">, "searchPa
       </Section>
 
       <Section title="Notifications">
-        <p className="mb-3 text-sm text-muted">Workout analyses, plan changes, your morning session and the Sunday review.</p>
+        <p className="mb-3 text-sm text-muted">Workout analyses, plan changes, workout reminders at 19:00 the evening before and the Sunday review.</p>
         <PushToggle vapidKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null} />
       </Section>
 

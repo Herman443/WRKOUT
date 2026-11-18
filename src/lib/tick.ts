@@ -36,18 +36,19 @@ export async function tick(now = new Date()) {
 
   const active = await getActivePlan();
 
-  if (active && hour >= 7 && hour < 10 && (await getKv<string>("morning_push_date")) !== today) {
-    await step("morning", async () => {
-      await setKv("morning_push_date", today);
-      const todays = (await workoutsBetween(active.plan.id, today, today)).filter((w) => w.status === "planned");
-      if (todays.length === 0) return sendPush({ title: "Rest day", body: "Nothing planned today. Recover well.", url: "/", tag: "today" });
-      const main = todays[0];
-      const more = todays.length > 1 ? ` (+${todays.length - 1} more)` : "";
+  if (active && hour === 19 && (await getKv<string>("evening_push_date")) !== today) {
+    await step("evening", async () => {
+      await setKv("evening_push_date", today);
+      const tomorrow = addDays(today, 1);
+      const tomorrows = (await workoutsBetween(active.plan.id, tomorrow, tomorrow)).filter((w) => w.status === "planned");
+      if (tomorrows.length === 0) return sendPush({ title: "Rest day", body: "Nothing planned tomorrow. Recover well.", url: "/", tag: "tomorrow" });
+      const main = tomorrows[0];
+      const more = tomorrows.length > 1 ? ` (+${tomorrows.length - 1} more)` : "";
       return sendPush({
-        title: `Today: ${main.title}`,
+        title: `Tomorrow: ${main.title}`,
         body: `${main.plannedDurationSec ? formatDuration(main.plannedDurationSec) : ""}${more}. ${main.purpose}`.trim(),
         url: `/workout/${main.id}`,
-        tag: "today",
+        tag: "tomorrow",
       });
     });
   }

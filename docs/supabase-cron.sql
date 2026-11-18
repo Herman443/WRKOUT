@@ -1,4 +1,4 @@
--- WRKOUT scheduler: calls the app every 15 minutes (Garmin polling, morning push,
+-- WRKOUT scheduler: calls the app every 15 minutes (Garmin polling, evening push,
 -- missed-session handling, Sunday review, rolling plan detail).
 -- Run once in Supabase → SQL Editor after replacing <CRON_SECRET> with your secret.
 
