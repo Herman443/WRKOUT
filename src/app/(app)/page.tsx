@@ -100,7 +100,7 @@ async function Today() {
     Object.fromEntries(days.map((date) => [date, <div key={date}>
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm text-muted">{formatDay(date, { weekday: "long", day: "numeric", month: "long" })}</p>
-        {readiness}
+        {date === today && readiness}
       </div>
       {daySessions(workouts, surface, date)}
     </div>]));
@@ -232,14 +232,15 @@ async function Today() {
 }
 
 const getReadiness = cache(async (today: string) => {
-  const [health] = await db.select({ hrvMs: dailyHealth.hrvMs, hrvStatus: dailyHealth.hrvStatus, sleepSec: dailyHealth.sleepSec })
-    .from(dailyHealth).where(eq(dailyHealth.date, today));
+  const [health] = await db.select({
+    hrvMs: dailyHealth.hrvMs, hrvStatus: dailyHealth.hrvStatus, sleepSec: dailyHealth.sleepSec, sleepScore: dailyHealth.sleepScore,
+  }).from(dailyHealth).where(eq(dailyHealth.date, today));
   return health;
 });
 
 async function TodayReadiness({ today }: { today: string }) {
   const health = await getReadiness(today);
-  return health && <Readiness hrv={health.hrvMs} hrvStatus={health.hrvStatus} sleepSec={health.sleepSec} />;
+  return health && <Readiness hrv={health.hrvMs} hrvStatus={health.hrvStatus} sleepSec={health.sleepSec} sleepScore={health.sleepScore} />;
 }
 
 async function PendingChanges() {
@@ -302,7 +303,9 @@ function sessionKind(type: string) {
   return map[type] ?? type.replace("_", " ").replace(/^./, (c) => c.toUpperCase());
 }
 
-function Readiness({ hrv, hrvStatus, sleepSec }: { hrv: number | null; hrvStatus: string | null; sleepSec: number | null }) {
+function Readiness({ hrv, hrvStatus, sleepSec, sleepScore }: {
+  hrv: number | null; hrvStatus: string | null; sleepSec: number | null; sleepScore: number | null;
+}) {
   const low = hrvStatus && /low|poor|unbalanced/i.test(hrvStatus);
   return (
     <div className="text-right text-sm">
@@ -315,6 +318,7 @@ function Readiness({ hrv, hrvStatus, sleepSec }: { hrv: number | null; hrvStatus
       {sleepSec && (
         <div className="text-muted">
           Slept <span className="num text-ink">{Math.floor(sleepSec / 3600)}:{String(Math.round((sleepSec % 3600) / 60)).padStart(2, "0")}</span>
+          {sleepScore != null && <> · score <span className="num text-ink">{sleepScore}</span></>}
         </div>
       )}
     </div>

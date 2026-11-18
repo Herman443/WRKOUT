@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { plannedWorkouts } from "@/db/schema";
 import { addDays, diffDays, localTime, startOfWeek, todayLocal, weekday } from "./dates";
 import { env } from "./env";
-import { fetchDailyHealth, logUnsyncedTreadmillSessions, pollGarmin } from "./ingest";
+import { backfillDailyHealth, fetchDailyHealth, hasOvernightData, logUnsyncedTreadmillSessions, pollGarmin } from "./ingest";
 import { getKv, setKv } from "./kv";
 import { enqueue, hasOpenJob, kickWorker } from "./jobs";
 import { getActivePlan, getWeeks, workoutsBetween } from "./plan-store";
@@ -28,10 +28,15 @@ export async function tick(now = new Date()) {
   if (env.garminApiKey && hour >= 5) await step("garmin", async () => (await pollGarmin()).length);
   await step("treadmill", () => logUnsyncedTreadmillSessions(now));
 
+  // The watch often syncs last night's sleep and HRV well after 07:00, and until then Garmin
+  // answers with empty fields. Keep asking every tick until they arrive (or give up at
+  // 15:00), then fill in any earlier mornings that were stored empty.
   if (env.garminApiKey && hour >= 7 && (await getKv<string>("health_date")) !== today) {
     await step("health", async () => {
-      await fetchDailyHealth(today);
+      const row = await fetchDailyHealth(today);
+      if (!hasOvernightData(row) && hour < 15) return "waiting for sync";
       await setKv("health_date", today);
+      return { today: hasOvernightData(row), backfilled: await backfillDailyHealth(today) };
     });
   }
 

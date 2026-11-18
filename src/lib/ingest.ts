@@ -372,13 +372,33 @@ export async function fetchDailyHealth(date: string) {
     sleepScore: num(obj(obj(dto.sleepScores).overall).value ?? dto.sleepScore),
     hrvMs: num(h.lastNightAvg ?? s.avgOvernightHrv),
     hrvStatus: typeof h.status === "string" ? h.status : typeof s.hrvStatus === "string" ? s.hrvStatus : null,
-    restingHr: num(day.restingHeartRate ?? s.restingHeartRate),
-    bodyBattery: num(day.bodyBatteryHighestValue ?? day.bodyBatteryAtWakeTime ?? s.bodyBatteryChange),
-    stress: num(day.averageStressLevel),
+    // v2 daily summaries nest these (heartRate.restingValue etc.); the flat names are the older shape.
+    restingHr: num(obj(day.heartRate).restingValue ?? day.restingHeartRate ?? s.restingHeartRate),
+    bodyBattery: num(obj(day.bodyBattery).maxValue ?? day.bodyBatteryHighestValue ?? day.bodyBatteryAtWakeTime),
+    stress: num(obj(day.stress).avgLevel ?? day.averageStressLevel),
     raw: { sleepTimeSeconds: dto.sleepTimeSeconds ?? null, hrv: h, day },
   };
   await db.insert(dailyHealth).values(row).onConflictDoUpdate({ target: dailyHealth.date, set: row });
   return row;
+}
+
+/** True once the watch has synced last night: Garmin answers with empty fields until then. */
+export const hasOvernightData = (row: { sleepSec: number | null; hrvMs: number | null }) =>
+  row.sleepSec != null || row.hrvMs != null;
+
+/** Re-fetches the past `days` mornings that were stored before the watch synced. */
+export async function backfillDailyHealth(today: string, days = 7) {
+  const from = addDays(today, -days);
+  const rows = await db.select({ date: dailyHealth.date, sleepSec: dailyHealth.sleepSec, hrvMs: dailyHealth.hrvMs })
+    .from(dailyHealth).where(and(gte(dailyHealth.date, from), lt(dailyHealth.date, today)));
+  const known = new Map(rows.map((r) => [r.date, r]));
+  const filled: string[] = [];
+  for (let d = from; d < today; d = addDays(d, 1)) {
+    const row = known.get(d);
+    if (row && hasOvernightData(row)) continue;
+    if (hasOvernightData(await fetchDailyHealth(d))) filled.push(d);
+  }
+  return filled;
 }
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
