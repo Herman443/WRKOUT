@@ -1,6 +1,7 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { Suspense } from "react";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { DeleteCoachMessage } from "@/components/delete-coach-message";
 import { SubmitButton } from "@/components/submit-button";
 import { PageTitle, Panel, Section, Skeleton, TextLink, inputClass } from "@/components/ui";
 import { db } from "@/db";
@@ -97,6 +98,7 @@ async function Coach() {
               >
                 {m.content}
               </div>
+              <DeleteCoachMessage id={m.id} />
             </li>
           ))}
         </ol>
